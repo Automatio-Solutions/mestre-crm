@@ -51,7 +51,7 @@ export function Dashboard() {
           Hoy tienes <b style={{ color: "var(--text)" }}>4 tareas</b> con vencimiento y
           <b style={{ color: "var(--text)" }}> {pendientes.length} facturas</b> pendientes de cobro por un total de{" "}
           <b style={{ color: "var(--text)" }}>
-            {pendientesTotal.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
+            {pendientesTotal.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
           </b>
           .
         </p>
@@ -110,7 +110,7 @@ function KpiCard({
   trend?: number[];
   color?: string;
 }) {
-  const fmt = value.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+  const fmt = value.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 });
   return (
     <Card>
       <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500, marginBottom: 10 }}>{label}</div>
@@ -269,7 +269,7 @@ function UpcomingCard({ invoices }: { invoices: any[] }) {
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
-                  {u.amount.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
+                  {u.amount.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
                 </div>
                 <Badge tone={tone} style={{ marginTop: 2 }}>
                   {diff < 0 ? `${Math.abs(diff)}d vencida` : diff === 0 ? "hoy" : `en ${diff}d`}
@@ -314,7 +314,7 @@ function TopClientsCard({ contacts, onOpen }: { contacts: any[]; onOpen: (id: st
                   {c.name}
                 </span>
                 <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>
-                  {c.facturado.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
+                  {c.facturado.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
                 </span>
               </div>
               <Progress value={c.facturado} max={max} color={i === 0 ? "var(--purple)" : "var(--black)"} />
@@ -444,10 +444,10 @@ function ObjectivesCard() {
                 <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{pct.toFixed(0)}%</span>
               </div>
               <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: "-0.01em", marginBottom: 6 }}>
-                {o.current.toLocaleString("es-ES", { useGrouping: "always" })}{o.unit ? ` ${o.unit}` : ""}
+                {o.current.toLocaleString("es-ES", { useGrouping: "always" as any })}{o.unit ? ` ${o.unit}` : ""}
                 <span style={{ color: "var(--text-faint)", fontWeight: 400, fontSize: 13 }}>
                   {" "}
-                  / {o.target.toLocaleString("es-ES", { useGrouping: "always" })}{o.unit}
+                  / {o.target.toLocaleString("es-ES", { useGrouping: "always" as any })}{o.unit}
                 </span>
               </div>
               <Progress

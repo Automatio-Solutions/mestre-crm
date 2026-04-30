@@ -14,9 +14,9 @@ export const StatCard = ({
 }) => {
   let display: string;
   if (format === "currency" && typeof value === "number") {
-    display = value.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+    display = value.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 });
   } else if (format === "number" && typeof value === "number") {
-    display = value.toLocaleString("es-ES", { useGrouping: "always" });
+    display = value.toLocaleString("es-ES", { useGrouping: "always" as any });
   } else {
     display = String(value);
   }

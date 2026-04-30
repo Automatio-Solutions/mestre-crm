@@ -1,5 +1,5 @@
+// @ts-nocheck
 "use client";
-/* @ts-nocheck */
 import * as React from "react";
 import { useState, useEffect, useMemo } from "react";
 import * as D from "@/lib/data";
@@ -214,7 +214,7 @@ export const Contactos = ({ setRoute, initialOpen }: any) => {
                     </Td>
                     <Td align="right" mono>
                       {c.facturado > 0
-                        ? c.facturado.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })
+                        ? c.facturado.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })
                         : "—"}
                     </Td>
                     <Td muted>{c.lastInteraction ? D.relativeTime(c.lastInteraction) : "—"}</Td>
@@ -438,7 +438,7 @@ const ContactDetail = ({
             <Field
               icon="euro"
               label="Facturado total"
-              value={contact.facturado.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR" })}
+              value={contact.facturado.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR" })}
             />
             <Field
               icon="clock"
@@ -466,7 +466,7 @@ const ContactDetail = ({
                     </div>
                   </div>
                   <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>
-                    {inv.total.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR" })}
+                    {inv.total.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR" })}
                   </div>
                   <Badge
                     tone={

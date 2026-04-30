@@ -1,5 +1,5 @@
+// @ts-nocheck
 "use client";
-/* @ts-nocheck */
 import * as React from "react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import * as D from "@/lib/data";
@@ -11,6 +11,8 @@ import {
 } from "@/components/ui";
 import { ClienteSidebar } from "./clientes";
 import { TaskModal } from "./task-modal";
+import { NewTaskModal } from "./new-task-modal";
+import { NewProjectModal } from "./new-project-modal";
 import { useClientSpaces } from "@/lib/db/useClientSpaces";
 import { useTasks } from "@/lib/db/useTasks";
 
@@ -18,32 +20,74 @@ import { useTasks } from "@/lib/db/useTasks";
 // CLIENTE → MÓDULO (Lista | Kanban | Calendario | Gantt)
 // ============================================================
 export const ClienteModulo = ({ clientId, moduleId, setRoute, initialTaskId }) => {
-  const { spaces, loading: spacesLoading } = useClientSpaces();
+  const { spaces, loading: spacesLoading, createModule } = useClientSpaces();
   const { tasks: moduleTasks, loading: tasksLoading, update: updateTaskDB, create: createTaskDB, remove: removeTaskDB } = useTasks({ clientId, moduleId });
   const client = spaces.find(s => s.id === clientId);
   const mod = client?.modules.find(m => m.id === moduleId);
   const [view, setView] = useState('lista');
   const [openTaskId, setOpenTaskId] = useState(initialTaskId || null);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+
+  const handleCreateProject = async ({ name, icon }) => {
+    await createModule({ clientId, name, icon });
+  };
   useEffect(() => { if (initialTaskId) setOpenTaskId(initialTaskId); }, [initialTaskId]);
 
   // Persistente: escribe a Supabase. useTasks hace update optimista.
   const updateTask = (id, patch) => { updateTaskDB(id, patch).catch((e) => console.error(e)); };
-  const allTasks = moduleTasks;
+  // Filtrar las archivadas de las vistas del proyecto
+  const allTasks = moduleTasks.filter(t => !t.customFields?.archived);
 
-  const newTaskQuick = async () => {
-    const title = prompt("Título de la tarea");
-    if (!title?.trim()) return;
-    await createTaskDB({ clientId, moduleId, title: title.trim() });
+  const handleCreateTask = async (values) => {
+    // values: { title, description, moduleId, assignees, dueDate, priority, category, subtasks, attachments }
+    const tags = values.category ? [values.category] : [];
+    const targetModuleId = values.moduleId || moduleId;
+    const created = await createTaskDB({
+      clientId,
+      moduleId: targetModuleId,
+      title: values.title,
+      description: values.description,
+      status: "todo",
+      priority: values.priority || "media",
+      assignees: values.assignees || [],
+      tags,
+      dueDate: values.dueDate || null,
+    });
+
+    // Construir log de actividad inicial (creación + asignaciones)
+    const now = new Date();
+    const newId = (p) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    const activity = [{ id: newId("a"), userId: "u1", action: "creó la tarea", when: now }];
+    (values.assignees || []).forEach((uid, i) => {
+      const name = D.userById(uid)?.name || uid;
+      activity.push({
+        id: newId("a"),
+        userId: "u1",
+        action: `asignó a ${name}`,
+        when: new Date(now.getTime() + i + 1),
+      });
+    });
+
+    // Persistir subtareas / adjuntos / actividad
+    if (created) {
+      await updateTaskDB(created.id, {
+        subtasks: values.subtasks || [],
+        attachments: values.attachments || [],
+        activity,
+      });
+    }
   };
 
   if (spacesLoading || tasksLoading) return <div style={{ padding: 40, color:'var(--text-muted)' }}>Cargando…</div>;
   if (!client || !mod) return <div style={{ padding: 40 }}>Módulo no encontrado.</div>;
 
-  const openTask = openTaskId ? allTasks.find(t => t.id === openTaskId) : null;
+  // Para abrir una tarea: usar moduleTasks completo (sin filtrar archivadas) por si llega un id de archivada
+  const openTask = openTaskId ? moduleTasks.find(t => t.id === openTaskId) : null;
 
   return (
     <div style={{ display:'grid', gridTemplateColumns:'240px 1fr', minHeight:'calc(100vh - 64px)' }}>
-      <ClienteSidebar client={client} tasks={allTasks} activeModule={moduleId} setRoute={setRoute}/>
+      <ClienteSidebar client={client} tasks={allTasks} activeModule={moduleId} setRoute={setRoute} onAddProject={() => setNewProjectOpen(true)}/>
       <div style={{ display:'flex', flexDirection:'column', overflow:'hidden' }}>
         <div style={{ padding:'22px 28px 0' }}>
           <div style={{ display:'flex', alignItems:'center', gap: 12, marginBottom: 14 }}>
@@ -60,7 +104,7 @@ export const ClienteModulo = ({ clientId, moduleId, setRoute, initialTaskId }) =
             ]}/>
             <div style={{ display:'flex', gap: 8 }}>
               <Button variant="outline" size="sm" leftIcon={<Icon name="filter" size={13}/>}>Filtros</Button>
-              <Button variant="primary" size="sm" leftIcon={<Icon name="plus" size={13}/>} onClick={newTaskQuick}>Nueva tarea</Button>
+              <Button variant="primary" size="sm" leftIcon={<Icon name="plus" size={13}/>} onClick={() => setNewTaskOpen(true)}>Nueva tarea</Button>
             </div>
           </div>
         </div>
@@ -72,28 +116,91 @@ export const ClienteModulo = ({ clientId, moduleId, setRoute, initialTaskId }) =
         </div>
       </div>
       {openTask && <TaskModal task={openTask} onClose={() => setOpenTaskId(null)} updateTask={(patch) => updateTask(openTask.id, patch)} client={client}/>}
+      <NewTaskModal
+        open={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
+        onSubmit={handleCreateTask}
+        projects={client?.modules || []}
+        defaultModuleId={moduleId}
+      />
+      <NewProjectModal
+        open={newProjectOpen}
+        onClose={() => setNewProjectOpen(false)}
+        onSubmit={handleCreateProject}
+      />
     </div>
   );
 };
 
 // ============================================================
-// VISTA LISTA (agrupada por estado)
+// VISTA LISTA (agrupada por estado, con drag & drop)
 // ============================================================
 const VistaLista = ({ tasks, onOpen, updateTask }) => {
   const [collapsed, setCollapsed] = useState({});
+  const [dragId, setDragId] = useState(null);
+  const [dragOverStatus, setDragOverStatus] = useState(null);
+
+  const handleDragStart = (id, e) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", id); } catch {}
+  };
+  const handleDragOver = (statusId, e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverStatus !== statusId) setDragOverStatus(statusId);
+  };
+  const handleDrop = (statusId, e) => {
+    e.preventDefault();
+    if (dragId) {
+      const t = tasks.find(x => x.id === dragId);
+      if (t && t.status !== statusId) {
+        const patch = { status: statusId };
+        if (statusId === 'done' && (t.progress || 0) < 100) patch.progress = 100;
+        if (statusId === 'todo' && t.progress === 100) patch.progress = 0;
+        updateTask(dragId, patch);
+      }
+    }
+    setDragId(null);
+    setDragOverStatus(null);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverStatus(null); };
+
   return (
     <div style={{ display:'flex', flexDirection:'column', gap: 18 }}>
       {D.STATUSES.map(st => {
         const list = tasks.filter(t => t.status === st.id);
         const open = !collapsed[st.id];
+        const isOver = dragOverStatus === st.id;
         return (
-          <div key={st.id}>
+          <div
+            key={st.id}
+            onDragOver={(e) => handleDragOver(st.id, e)}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) setDragOverStatus(null);
+            }}
+            onDrop={(e) => handleDrop(st.id, e)}
+            style={{
+              borderRadius: 10,
+              outline: isOver ? '2px dashed var(--purple)' : '2px dashed transparent',
+              outlineOffset: 4,
+              background: isOver ? 'var(--purple-soft)' : 'transparent',
+              transition: 'background 140ms ease, outline-color 140ms ease',
+              padding: isOver ? '4px' : '0',
+              margin: isOver ? '-4px' : '0',
+            }}
+          >
             <button onClick={() => setCollapsed(c => ({ ...c, [st.id]: !c[st.id] }))}
               style={{ display:'flex', alignItems:'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 500 }}>
               <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} style={{ color:'var(--text-muted)' }}/>
               <span style={{ width: 8, height: 8, borderRadius:'50%', background: st.color }}/>
               <span>{st.name}</span>
               <span style={{ color:'var(--text-muted)', fontWeight: 400 }}>{list.length}</span>
+              {isOver && (
+                <span style={{ color: 'var(--purple)', fontWeight: 500, marginLeft: 6 }}>
+                  · Suelta aquí
+                </span>
+              )}
             </button>
             {open && (
               <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius: 10, overflow:'hidden' }}>
@@ -106,11 +213,30 @@ const VistaLista = ({ tasks, onOpen, updateTask }) => {
                   <div>Progreso</div>
                   <div/>
                 </div>
-                {list.map((t, i) => (
-                  <div key={t.id} onClick={() => onOpen(t.id)}
-                    style={{ display:'grid', gridTemplateColumns:'26px 1fr 140px 160px 110px 80px 40px', alignItems:'center', padding:'10px 14px', borderTop: i === 0 ? 'none' : '1px solid var(--border)', cursor:'pointer', fontSize: 13, transition:'background 120ms' }}
-                    onMouseEnter={(e)=>e.currentTarget.style.background='var(--beige-bg)'}
-                    onMouseLeave={(e)=>e.currentTarget.style.background='transparent'}>
+                {list.length === 0 && (
+                  <div style={{ padding: '14px', fontSize: 12, color: 'var(--text-faint)' }}>
+                    {isOver ? 'Suelta aquí para mover la tarea' : 'Sin tareas en este estado'}
+                  </div>
+                )}
+                {list.map((t, i) => {
+                  const isDragging = dragId === t.id;
+                  return (
+                  <div key={t.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(t.id, e)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => { if (!isDragging) onOpen(t.id); }}
+                    style={{
+                      display:'grid', gridTemplateColumns:'26px 1fr 140px 160px 110px 80px 40px',
+                      alignItems:'center', padding:'10px 14px',
+                      borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                      cursor: isDragging ? 'grabbing' : 'grab',
+                      fontSize: 13,
+                      opacity: isDragging ? 0.4 : 1,
+                      transition:'background 120ms, opacity 120ms',
+                    }}
+                    onMouseEnter={(e)=>{ if (!isDragging) e.currentTarget.style.background='var(--beige-bg)'; }}
+                    onMouseLeave={(e)=>{ if (!isDragging) e.currentTarget.style.background='transparent'; }}>
                     <div onClick={(e) => { e.stopPropagation(); updateTask(t.id, { status: t.status === 'done' ? 'todo' : 'done' }); }} style={{ cursor:'pointer' }}>
                       <div style={{ width: 16, height: 16, borderRadius: 4, border:'1.5px solid var(--border-strong)', background: t.status === 'done' ? 'var(--success)' : 'var(--surface)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                         {t.status === 'done' && <Icon name="check" size={11} style={{ color:'#fff' }} stroke={3}/>}
@@ -128,8 +254,8 @@ const VistaLista = ({ tasks, onOpen, updateTask }) => {
                     <div style={{ fontSize: 11, color:'var(--text-muted)', fontVariantNumeric:'tabular-nums' }}>{t.progress}%</div>
                     <button onClick={(e) => e.stopPropagation()} style={{ color:'var(--text-faint)' }}><Icon name="moreV" size={13}/></button>
                   </div>
-                ))}
-                {list.length === 0 && <div style={{ padding:'18px 14px', fontSize: 12, color:'var(--text-faint)' }}>Sin tareas en este estado</div>}
+                  );
+                })}
               </div>
             )}
           </div>

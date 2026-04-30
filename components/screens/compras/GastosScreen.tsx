@@ -168,11 +168,11 @@ export function GastosScreen() {
                   <Td muted>{p.concept || "—"}</Td>
                   <Td>{p.category ? <TagPill tag={p.category} size="sm" /> : <span style={{ color: "var(--text-faint)" }}>—</span>}</Td>
                   <Td muted>{D.fmtShort(p.issueDate)}</Td>
-                  <Td align="right" mono>{p.base.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</Td>
-                  <Td align="right" mono muted>{p.vat.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</Td>
-                  <Td align="right" mono><span style={{ fontWeight: 600 }}>{p.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</span></Td>
+                  <Td align="right" mono>{p.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</Td>
+                  <Td align="right" mono muted>{p.vat.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</Td>
+                  <Td align="right" mono><span style={{ fontWeight: 600 }}>{p.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</span></Td>
                   <Td><Badge tone={statusTone[p.status]}>{p.status}</Badge></Td>
-                  <Td onClick={(e) => e.stopPropagation()}>
+                  <Td onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                     <Dropdown
                       align="end"
                       trigger={
@@ -227,13 +227,13 @@ export function GastosScreen() {
                   </span>
                 </Td>
                 <Td align="right" mono style={{ fontWeight: 600 }}>
-                  {filtered.reduce((s, p) => s + p.base, 0).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €
+                  {filtered.reduce((s, p) => s + p.base, 0).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €
                 </Td>
                 <Td align="right" mono style={{ fontWeight: 600 }}>
-                  {filtered.reduce((s, p) => s + p.vat, 0).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €
+                  {filtered.reduce((s, p) => s + p.vat, 0).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €
                 </Td>
                 <Td align="right" mono style={{ fontWeight: 600 }}>
-                  {filtered.reduce((s, p) => s + p.total, 0).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €
+                  {filtered.reduce((s, p) => s + p.total, 0).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €
                 </Td>
                 <Td colSpan={2} />
               </tr>

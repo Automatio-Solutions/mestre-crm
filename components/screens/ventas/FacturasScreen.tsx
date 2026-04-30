@@ -223,11 +223,11 @@ function FacturasTab({
                   <Td muted>{inv.concept}</Td>
                   <Td muted>{D.fmtShort(inv.issueDate)}</Td>
                   <Td muted>{inv.dueDate ? D.fmtShort(inv.dueDate) : "—"}</Td>
-                  <Td align="right" mono>{inv.base.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</Td>
-                  <Td align="right" mono muted>{(inv.total - inv.base).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</Td>
-                  <Td align="right" mono><span style={{ fontWeight: 600 }}>{inv.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</span></Td>
+                  <Td align="right" mono>{inv.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</Td>
+                  <Td align="right" mono muted>{(inv.total - inv.base).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</Td>
+                  <Td align="right" mono><span style={{ fontWeight: 600 }}>{inv.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</span></Td>
                   <Td><Badge tone={statusTone[inv.status]}>{inv.status}</Badge></Td>
-                  <Td onClick={(e) => e.stopPropagation()}>
+                  <Td onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                     <Dropdown
                       align="end"
                       trigger={
@@ -288,9 +288,9 @@ function FacturasTab({
             <tfoot>
               <tr style={{ borderTop: "1.5px solid var(--border-strong)", background: "var(--beige-bg)" }}>
                 <Td colSpan={5}><span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Totales ({filtered.length})</span></Td>
-                <Td align="right" mono style={{ fontWeight: 600 }}>{filtered.reduce((s, i) => s + i.base, 0).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</Td>
-                <Td align="right" mono style={{ fontWeight: 600 }}>{filtered.reduce((s, i) => s + (i.total - i.base), 0).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</Td>
-                <Td align="right" mono style={{ fontWeight: 600 }}>{filtered.reduce((s, i) => s + i.total, 0).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €</Td>
+                <Td align="right" mono style={{ fontWeight: 600 }}>{filtered.reduce((s, i) => s + i.base, 0).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</Td>
+                <Td align="right" mono style={{ fontWeight: 600 }}>{filtered.reduce((s, i) => s + (i.total - i.base), 0).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</Td>
+                <Td align="right" mono style={{ fontWeight: 600 }}>{filtered.reduce((s, i) => s + i.total, 0).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €</Td>
                 <Td colSpan={2} />
               </tr>
             </tfoot>
@@ -423,7 +423,7 @@ function RecurrentesTab() {
               <div style={{ fontSize: 14, fontWeight: 500 }}>{cli?.name || "(Sin cliente)"}</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>{r.concept || "—"}</div>
               <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: "-0.01em" }}>
-                {r.amount.toLocaleString("es-ES", { useGrouping: "always" })} €
+                {r.amount.toLocaleString("es-ES", { useGrouping: "always" as any })} €
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11.5, color: "var(--text-muted)", marginTop: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -725,7 +725,7 @@ function RemesasTab({
                   </DropdownItem>
                 </Dropdown>
               </div>
-              <div style={{ fontSize: 18, fontWeight: 500 }}>{r.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</div>
+              <div style={{ fontSize: 18, fontWeight: 500 }}>{r.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</div>
               <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
                 {r.count} facturas · {D.fmtShort(r.date)}
               </div>
@@ -742,7 +742,7 @@ function RemesasTab({
           background: "var(--purple-soft)", borderRadius: 10, border: "1px solid #D4CEEE",
         }}>
           <span style={{ fontSize: 13, fontWeight: 500, color: "var(--purple)" }}>
-            {selected.size} facturas seleccionadas · {selTotal.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+            {selected.size} facturas seleccionadas · {selTotal.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
           </span>
           <div style={{ flex: 1 }} />
           <Button variant="outline" size="sm" leftIcon={<Icon name="download" size={13} />}>Descargar XML SEPA</Button>
@@ -806,7 +806,7 @@ function RemesasTab({
                       {inv.dueDate ? D.fmtShort(inv.dueDate) : "—"}
                     </span>
                   </Td>
-                  <Td align="right" mono style={{ fontWeight: 500 }}>{inv.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
+                  <Td align="right" mono style={{ fontWeight: 500 }}>{inv.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
                   <Td mono muted style={{ fontSize: 11 }}>ES•• •••• •••• ••••</Td>
                   <Td><Badge tone="success">firmado</Badge></Td>
                 </tr>

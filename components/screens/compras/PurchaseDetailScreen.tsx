@@ -149,9 +149,9 @@ export function PurchaseDetailScreen({ purchaseId }: { purchaseId: string }) {
                       )}
                     </Td>
                     <Td align="right" mono>{l.quantity}</Td>
-                    <Td align="right" mono>{l.price.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
+                    <Td align="right" mono>{l.price.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
                     <Td align="right" mono muted>{l.vat}%</Td>
-                    <Td align="right" mono style={{ fontWeight: 500 }}>{calcLineSubtotal(l).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
+                    <Td align="right" mono style={{ fontWeight: 500 }}>{calcLineSubtotal(l).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
                   </tr>
                 ))}
               </tbody>
@@ -176,11 +176,11 @@ export function PurchaseDetailScreen({ purchaseId }: { purchaseId: string }) {
         <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <Card padding={18}>
             <div style={sectionHeader}>Totales</div>
-            <SummaryRow label="Base imponible" value={<span style={{ }}>{p.base.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>} />
-            <SummaryRow label={`IVA (${p.vatPct}%)`} value={<span style={{ }}>{p.vat.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>} />
+            <SummaryRow label="Base imponible" value={<span style={{ }}>{p.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>} />
+            <SummaryRow label={`IVA (${p.vatPct}%)`} value={<span style={{ }}>{p.vat.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>} />
             <SummaryRow
               label="Total"
-              value={<span style={{ fontWeight: 600 }}>{p.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>}
+              value={<span style={{ fontWeight: 600 }}>{p.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>}
               last
             />
           </Card>

@@ -12,7 +12,7 @@ type IconName =
   | "user" | "mail" | "phone" | "pin" | "building" | "dots" | "play"
   | "camera" | "refresh" | "bank" | "truck" | "loader" | "alert" | "x";
 
-export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, "name"> {
+export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, "name" | "stroke"> {
   name: IconName | string;
   size?: number;
   stroke?: number;

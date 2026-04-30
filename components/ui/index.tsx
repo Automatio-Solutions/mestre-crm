@@ -450,13 +450,14 @@ export function Sheet({
 
 // -------- Modal --------
 export function Modal({
-  open, onClose, children, width = 720, fullscreen = false,
+  open, onClose, children, width = 720, fullscreen = false, zIndex = 120,
 }: {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   width?: number;
   fullscreen?: boolean;
+  zIndex?: number;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -468,7 +469,7 @@ export function Modal({
   return (
     <div
       style={{
-        position: "fixed", inset: 0, zIndex: 120, display: "flex",
+        position: "fixed", inset: 0, zIndex, display: "flex",
         alignItems: fullscreen ? "stretch" : "center", justifyContent: "center",
         padding: fullscreen ? 0 : 32,
       }}

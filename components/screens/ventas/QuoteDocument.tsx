@@ -260,4 +260,4 @@ const tdDoc: React.CSSProperties = {
 };
 
 const formatEur = (n: number) =>
-  n.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "€";
+  n.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "€";

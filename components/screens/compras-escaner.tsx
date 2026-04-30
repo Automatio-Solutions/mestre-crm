@@ -1,5 +1,5 @@
+// @ts-nocheck
 "use client";
-/* @ts-nocheck */
 import * as React from "react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import * as D from "@/lib/data";
@@ -183,9 +183,9 @@ export const Escaner = ({ setRoute }) => {
                         <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 4 }}><span>Fecha</span><span>{D.fmtDate(sel.extracted.date)}</span></div>
                         <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 4 }}><span>Concepto</span><span>Servicios</span></div>
                         <div style={{ height: 1, background:'#eee', margin:'12px 0' }}/>
-                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 4 }}><span>Base</span><span>{sel.extracted.base.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span></div>
-                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 4 }}><span>IVA 21%</span><span>{sel.extracted.iva.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span></div>
-                        <div style={{ display:'flex', justifyContent:'space-between', fontWeight: 700, marginTop: 6, fontFamily:'var(--font-sans)' }}><span>TOTAL</span><span>{sel.extracted.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span></div>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 4 }}><span>Base</span><span>{sel.extracted.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span></div>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 4 }}><span>IVA 21%</span><span>{sel.extracted.iva.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span></div>
+                        <div style={{ display:'flex', justifyContent:'space-between', fontWeight: 700, marginTop: 6, fontFamily:'var(--font-sans)' }}><span>TOTAL</span><span>{sel.extracted.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span></div>
                       </>
                     ) : null}
                   </div>
@@ -200,10 +200,10 @@ export const Escaner = ({ setRoute }) => {
                       <FieldInput label="Proveedor" value={sel.extracted.provider} confidence={0.98}/>
                       <FieldInput label="Fecha" value={D.fmtDate(sel.extracted.date)} confidence={0.95}/>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10 }}>
-                        <FieldInput label="Base imponible" value={sel.extracted.base.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'} confidence={0.92}/>
-                        <FieldInput label="IVA" value={sel.extracted.iva.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'} confidence={0.90}/>
+                        <FieldInput label="Base imponible" value={sel.extracted.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'} confidence={0.92}/>
+                        <FieldInput label="IVA" value={sel.extracted.iva.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'} confidence={0.90}/>
                       </div>
-                      <FieldInput label="Total" value={sel.extracted.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'} confidence={0.99} emphasis/>
+                      <FieldInput label="Total" value={sel.extracted.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'} confidence={0.99} emphasis/>
                       <FieldInput label="Categoría" value={sel.extracted.category} confidence={sel.status === 'review' ? 0.68 : 0.88} tag/>
                       <FieldInput label="Método de pago" value="Tarjeta" confidence={0.72}/>
                       {sel.status === 'review' && (

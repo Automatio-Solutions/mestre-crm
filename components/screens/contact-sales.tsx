@@ -63,7 +63,7 @@ export function ContactSalesChart({ invoices, year, onChangeYear, availableYears
     <Card padding={24}>
       <CardHeader
         title="Evolución de ventas"
-        subtitle={`${yearInvoices.length} facturas · ${monthly.reduce((s, v) => s + v, 0).toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}`}
+        subtitle={`${yearInvoices.length} facturas · ${monthly.reduce((s, v) => s + v, 0).toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}`}
         action={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <select
@@ -152,7 +152,7 @@ export function ContactSalesChart({ invoices, year, onChangeYear, availableYears
                     fontSize="10"
                     fill="var(--text-muted)"
                     textAnchor="middle"
-                    fontVariantNumeric="tabular-nums"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
                   >
                     {Math.round(v / 1000)}k
                   </text>
@@ -231,7 +231,7 @@ export function ContactSalesKpis({ invoices }: { invoices: Invoice[] }) {
   const last = emitidas.slice().sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime())[0];
 
   const fmtEur = (v: number) =>
-    v.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+    v.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
   return (
     <div

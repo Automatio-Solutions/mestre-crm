@@ -219,7 +219,7 @@ async function main() {
 
   // 7) PURCHASES (gastos / facturas recibidas)
   const purchases = (D.PURCHASES || []).map((p: any) => {
-    const rawLines = (D.PURCHASE_LINES as any)?.[p.id];
+    const rawLines = ((D as any).PURCHASE_LINES as any)?.[p.id];
     const lines = Array.isArray(rawLines) && rawLines.length > 0
       ? rawLines.map((l: any, idx: number) => ({
           id: l.id || `l${idx + 1}`,

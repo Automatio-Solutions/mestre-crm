@@ -236,7 +236,7 @@ export function ConceptAutocomplete({
                   whiteSpace: "nowrap",
                 }}
               >
-                {s.price.toLocaleString("es-ES", { useGrouping: "always" })} €
+                {s.price.toLocaleString("es-ES", { useGrouping: "always" as any })} €
               </div>
             </button>
           ))}

@@ -77,7 +77,7 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
       ? [{ icon: "mail", text: `Enviada a ${cli?.email || cli?.name || ""}`, when: new Date(inv.issueDate.getTime() + 3 * 3600000), color: "var(--purple)" }]
       : []),
     ...payments.map((p: any) => ({
-      icon: "check", text: `Cobro de ${p.amount.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR" })} por ${p.method}`,
+      icon: "check", text: `Cobro de ${p.amount.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR" })} por ${p.method}`,
       when: p.date, color: "var(--success)",
     })),
     ...(inv.status === "pagada"
@@ -192,9 +192,9 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
                   <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
                     <Td>{l.description}</Td>
                     <Td align="right" mono>{l.quantity}</Td>
-                    <Td align="right" mono>{l.price.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
+                    <Td align="right" mono>{l.price.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
                     <Td align="right" mono muted>{l.vat}%</Td>
-                    <Td align="right" mono style={{ fontWeight: 500 }}>{(l.quantity * l.price).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
+                    <Td align="right" mono style={{ fontWeight: 500 }}>{(l.quantity * l.price).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Td>
                   </tr>
                 ))}
               </tbody>
@@ -236,7 +236,7 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>Total</span>
                   <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.01em" }}>
-                    {inv.total.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", minimumFractionDigits: 2 })}
+                    {inv.total.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <SummaryRow label="Número de documento" value={<span style={{ }}>{inv.number}</span>} />
@@ -285,14 +285,14 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
                           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{D.fmtShort(p.date)} · {p.ref}</div>
                         </div>
                         <span style={{ color: "var(--success)", fontWeight: 500 }}>
-                          {p.amount.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR" })}
+                          {p.amount.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR" })}
                         </span>
                       </div>
                     ))}
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", marginTop: 4, borderTop: "1px solid var(--border)", fontSize: 12.5, fontWeight: 500 }}>
                       <span>Cobrado</span>
                       <span style={{ color: "var(--success)" }}>
-                        {paid.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR" })}
+                        {paid.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR" })}
                       </span>
                     </div>
                   </>
@@ -305,7 +305,7 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
                 }}>
                   <span>Pendiente de pago</span>
                   <span style={{ color: pending > 0 ? "var(--warning)" : "var(--text-muted)" }}>
-                    {pending.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR" })}
+                    {pending.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR" })}
                   </span>
                 </div>
               </Card>
@@ -534,9 +534,9 @@ function InvoicePreview({ inv, cli, lines }: { inv: any; cli: any; lines: any[] 
             <tr key={i} style={{ borderBottom: "1px solid #f0f0f0" }}>
               <td style={{ padding: "10px 0" }}>{l.description}</td>
               <td style={{ padding: "10px 0", textAlign: "right" }}>{l.quantity}</td>
-              <td style={{ padding: "10px 0", textAlign: "right" }}>{l.price.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</td>
+              <td style={{ padding: "10px 0", textAlign: "right" }}>{l.price.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</td>
               <td style={{ padding: "10px 0", textAlign: "right" }}>
-                {(l.quantity * l.price).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                {(l.quantity * l.price).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
               </td>
             </tr>
           ))}
@@ -547,15 +547,15 @@ function InvoicePreview({ inv, cli, lines }: { inv: any; cli: any; lines: any[] 
         <div style={{ width: 200, fontSize: 10.5 }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
             <span style={{ color: "#666" }}>Base imponible</span>
-            <span style={{ }}>{inv.base.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+            <span style={{ }}>{inv.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
             <span style={{ color: "#666" }}>IVA {inv.vatPct}%</span>
-            <span style={{ }}>{(inv.total - inv.base).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+            <span style={{ }}>{(inv.total - inv.base).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", marginTop: 6, borderTop: "1px solid #222", fontSize: 13, fontWeight: 700 }}>
             <span>TOTAL</span>
-            <span style={{ }}>{inv.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+            <span style={{ }}>{inv.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
           </div>
         </div>
       </div>

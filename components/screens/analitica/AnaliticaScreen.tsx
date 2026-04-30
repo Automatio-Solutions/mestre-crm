@@ -134,7 +134,7 @@ export function AnaliticaScreen() {
           label="Beneficio"
           value={beneficio}
           color={beneficio >= 0 ? "var(--text)" : "var(--error)"}
-          sub={`${margin.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 1, maximumFractionDigits: 1 })}% margen`}
+          sub={`${margin.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 1, maximumFractionDigits: 1 })}% margen`}
         />
         <StatCard label="Facturas emitidas" value={invoices.filter((i) => i.issueDate.getFullYear() === year && i.status !== "borrador").length} format="number" />
       </div>
@@ -219,7 +219,7 @@ export function AnaliticaScreen() {
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
                     <span style={{ fontWeight: 500 }}>{item.client!.name}</span>
                     <span>
-                      {item.total.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
+                      {item.total.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
                     </span>
                   </div>
                   <Progress value={item.total} max={maxClient} color={i === 0 ? "var(--purple)" : "var(--black)"} />
@@ -319,7 +319,7 @@ function DonutChart({ data, total }: { data: { name: string; value: number; colo
           return <path key={i} d={path} fill={d.color} />;
         })}
         <text x={cx} y={cy - 2} fontSize="14" fill="var(--text)" textAnchor="middle" fontWeight="600">
-          {(total / 1000).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 0, maximumFractionDigits: 0 })}k€
+          {(total / 1000).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 0, maximumFractionDigits: 0 })}k€
         </text>
         <text x={cx} y={cy + 14} fontSize="10" fill="var(--text-muted)" textAnchor="middle">
           Total
@@ -336,10 +336,10 @@ function LegendRow({ color, label, value, total }: { color: string; label: strin
       <span style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
       <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
       <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>
-        {value.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
+        {value.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
       </span>
       <span style={{ color: "var(--text-muted)", fontSize: 11, width: 40, textAlign: "right" }}>
-        {pct.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 0, maximumFractionDigits: 0 })}%
+        {pct.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 0, maximumFractionDigits: 0 })}%
       </span>
     </div>
   );

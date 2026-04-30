@@ -28,14 +28,34 @@ export const relativeTime = (d) => {
 // USERS (team de Dani Mestre)
 // ============================================================
 export const USERS = [
-  { id: 'u1', name: 'Dani Mestre', initials: 'DM', role: 'Founder', color: '#6A5ACD' },
+  { id: 'u1', name: 'Dani Mestre',   initials: 'DM', role: 'Founder',         color: '#6A5ACD' },
+  { id: 'u7', name: 'Noelia Pérez',  initials: 'NP', role: 'Operaciones',     color: '#4A7C59' },
+  // legacy (referenced by mock data, no longer en el equipo activo)
   { id: 'u2', name: 'María López',  initials: 'ML', role: 'Project Manager', color: '#B84545' },
   { id: 'u3', name: 'Carlos Ruiz',  initials: 'CR', role: 'Content Lead',    color: '#4A7C59' },
   { id: 'u4', name: 'Nora Ibáñez',  initials: 'NI', role: 'Designer',        color: '#C89B3C' },
   { id: 'u5', name: 'Pablo Vega',   initials: 'PV', role: 'Developer',       color: '#2A6FB3' },
   { id: 'u6', name: 'Elena Torres', initials: 'ET', role: 'Social Media',    color: '#9B3A8F' },
 ];
+
+// Equipo activo (los que aparecen en pickers de asignación)
+export const TEAM_USER_IDS = ['u1', 'u7'];
+export const TEAM = TEAM_USER_IDS.map((id) => USERS.find((u) => u.id === id)).filter(Boolean);
+
 export const userById = (id) => USERS.find(u => u.id === id);
+
+// Categorías de tareas (paleta de colores corporativa)
+export const TASK_CATEGORIES = [
+  { id: 'fabricacion',    name: 'Fabricación',    bg: '#E8F1EA', fg: '#2F5A3D' },
+  { id: 'logistica',      name: 'Logística',      bg: '#E4EEF7', fg: '#2B5A85' },
+  { id: 'comercial',      name: 'Comercial',      bg: '#FAE8E1', fg: '#9B4A2E' },
+  { id: 'administrativo', name: 'Administrativo', bg: '#F0EBE0', fg: '#6B5A35' },
+  { id: 'calidad',        name: 'Calidad',        bg: '#FAF1DC', fg: '#8C6A1E' },
+  { id: 'marketing',      name: 'Marketing',      bg: '#EBE8FB', fg: '#4F42A8' },
+  { id: 'compras',        name: 'Compras',        bg: '#E8F1EA', fg: '#2F5A3D' },
+  { id: 'gerencia',       name: 'Gerencia',       bg: '#F5E1E1', fg: '#8C2E2E' },
+];
+export const taskCategoryById = (id) => TASK_CATEGORIES.find((c) => c.id === id);
 
 // ============================================================
 // CONTACTS — empresas españolas plausibles (inventadas)

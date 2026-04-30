@@ -8,8 +8,8 @@ import * as D from "@/lib/data";
 export function NominasScreen() {
   // Fase 1: esqueleto con mock del diseño original.
   // Fase futura: tabla `payroll` en Supabase con empleados, nóminas mensuales, IRPF, SS, etc.
-  const employees = (D.EMPLOYEES as any[] | undefined) || [];
-  const summary = (D.PAYROLL_SUMMARY as any) || {
+  const employees = ((D as any).EMPLOYEES as any[] | undefined) || [];
+  const summary = ((D as any).PAYROLL_SUMMARY as any) || {
     monthTotal: 0,
     irpfRetained: 0,
     ssPatronal: 0,
@@ -69,8 +69,8 @@ export function NominasScreen() {
                   <Td><b style={{ fontWeight: 500 }}>{e.name}</b></Td>
                   <Td muted>{e.role}</Td>
                   <Td><Badge tone="neutral">{e.type || "Indefinido"}</Badge></Td>
-                  <Td align="right" mono>{(e.grossMonth || 0).toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}</Td>
-                  <Td align="right" mono>{(e.netMonth || 0).toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR", maximumFractionDigits: 0 })}</Td>
+                  <Td align="right" mono>{(e.grossMonth || 0).toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}</Td>
+                  <Td align="right" mono>{(e.netMonth || 0).toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR", maximumFractionDigits: 0 })}</Td>
                   <Td><Badge tone={e.active === false ? "outline" : "success"}>{e.active === false ? "Baja" : "Alta"}</Badge></Td>
                 </tr>
               ))}

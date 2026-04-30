@@ -262,7 +262,7 @@ export function PresupuestosScreen() {
                           </div>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <div style={{ fontSize: 14, fontWeight: 500 }}>
-                              {q.amount.toLocaleString("es-ES", { useGrouping: "always" })} €
+                              {q.amount.toLocaleString("es-ES", { useGrouping: "always" as any })} €
                             </div>
                             {!["aceptado", "rechazado"].includes(q.status) && (
                               <div
@@ -352,7 +352,7 @@ export function PresupuestosScreen() {
                     <Td>{owner && <Avatar user={owner} size={22} />}</Td>
                     <Td muted>{D.fmtShort(q.issueDate)}</Td>
                     <Td muted>{q.expireDate ? D.fmtShort(q.expireDate) : "—"}</Td>
-                    <Td align="right" mono style={{ fontWeight: 500 }}>{q.amount.toLocaleString("es-ES", { useGrouping: "always" })} €</Td>
+                    <Td align="right" mono style={{ fontWeight: 500 }}>{q.amount.toLocaleString("es-ES", { useGrouping: "always" as any })} €</Td>
                     <Td align="right" mono muted>{q.probability}%</Td>
                     <Td>
                       <Badge
@@ -369,7 +369,7 @@ export function PresupuestosScreen() {
                         {st?.name}
                       </Badge>
                     </Td>
-                    <Td onClick={(e) => e.stopPropagation()}>
+                    <Td onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                       <Dropdown
                         align="end"
                         trigger={

@@ -185,10 +185,10 @@ export function QuoteDetailScreen({ quoteId }: { quoteId: string }) {
               <div>
                 <div style={sectionHeader}>Importe</div>
                 <div style={{ fontSize: 34, fontWeight: 500, letterSpacing: "-0.02em" }}>
-                  {q.amount.toLocaleString("es-ES", { useGrouping: "always" })} €
+                  {q.amount.toLocaleString("es-ES", { useGrouping: "always" as any })} €
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                  Base imponible · + 21% IVA = {(q.amount * 1.21).toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2 })} €
+                  Base imponible · + 21% IVA = {(q.amount * 1.21).toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2 })} €
                 </div>
               </div>
               {!["aceptado", "rechazado"].includes(q.status) && (
@@ -213,7 +213,7 @@ export function QuoteDetailScreen({ quoteId }: { quoteId: string }) {
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                     Ponderado: <b style={{ }}>
-                      {Math.round((q.amount * q.probability) / 100).toLocaleString("es-ES", { useGrouping: "always" })} €
+                      {Math.round((q.amount * q.probability) / 100).toLocaleString("es-ES", { useGrouping: "always" as any })} €
                     </b>
                   </div>
                 </div>

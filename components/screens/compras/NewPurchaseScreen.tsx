@@ -240,7 +240,7 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
                       </select>
                     </td>
                     <td style={{ ...tdCell, textAlign: "right", fontWeight: 500, paddingRight: 12 }}>
-                      {subtotal.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      {subtotal.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                     </td>
                     <td style={{ ...tdCell, textAlign: "center", width: 40 }}>
                       <button
@@ -281,15 +281,15 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, minWidth: 240 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--text-muted)" }}>Subtotal</span>
-                <span>{totals.base.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                <span>{totals.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--text-muted)" }}>IVA soportado</span>
-                <span>{totals.vat.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                <span>{totals.vat.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6, borderTop: "1px solid var(--border)", fontWeight: 600, fontSize: 15 }}>
                 <span>Total</span>
-                <span>{totals.total.toLocaleString("es-ES", { useGrouping: "always", minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                <span>{totals.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
               </div>
             </div>
           </div>

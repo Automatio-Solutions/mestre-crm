@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { CommandPalette } from "./CommandPalette";
@@ -16,6 +17,9 @@ const TWEAK_DEFAULTS: Tweaks = {
 const STORAGE_KEY = "dm-crm-tweaks";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() || "";
+  const isPublicPortal = pathname.startsWith("/portal");
+
   const [collapsed, setCollapsed] = useState(TWEAK_DEFAULTS.sidebarCollapsed);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [tweaksOpen, setTweaksOpen] = useState(false);
@@ -62,6 +66,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const updateTweak = <K extends keyof Tweaks>(key: K, value: Tweaks[K]) =>
     setTweaks((t) => ({ ...t, [key]: value }));
+
+  // Portal público de cliente: layout limpio sin sidebar/header de la agencia
+  if (isPublicPortal) {
+    return (
+      <ToastProvider>
+        <ConfirmProvider>
+          <main style={{ minHeight: "100vh" }}>{children}</main>
+        </ConfirmProvider>
+      </ToastProvider>
+    );
+  }
 
   return (
     <ToastProvider>

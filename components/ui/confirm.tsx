@@ -61,7 +61,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   return (
     <ConfirmCtx.Provider value={confirm}>
       {children}
-      <Modal open={!!pending} onClose={() => close(false)} width={440}>
+      <Modal open={!!pending} onClose={() => close(false)} width={440} zIndex={500}>
         {pending && (
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "20px 24px 0", display: "flex", gap: 14 }}>

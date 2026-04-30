@@ -183,7 +183,7 @@ export function ContactDetailPage({ contactId }: { contactId: string }) {
                       </div>
                     </div>
                     <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>
-                      {inv.total.toLocaleString("es-ES", { useGrouping: "always", style: "currency", currency: "EUR" })}
+                      {inv.total.toLocaleString("es-ES", { useGrouping: "always" as any, style: "currency", currency: "EUR" })}
                     </div>
                     <Badge
                       tone={

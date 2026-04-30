@@ -1,5 +1,5 @@
+// @ts-nocheck
 "use client";
-/* @ts-nocheck */
 import * as React from "react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import * as D from "@/lib/data";

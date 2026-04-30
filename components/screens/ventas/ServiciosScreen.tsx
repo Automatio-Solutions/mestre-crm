@@ -65,7 +65,7 @@ export function ServiciosScreen() {
           label="Más alto"
           value={mostExpensive?.name || "—"}
           format="text"
-          sub={mostExpensive ? `${mostExpensive.price.toLocaleString("es-ES", { useGrouping: "always" })} €` : undefined}
+          sub={mostExpensive ? `${mostExpensive.price.toLocaleString("es-ES", { useGrouping: "always" as any })} €` : undefined}
         />
       </div>
 
@@ -163,7 +163,7 @@ export function ServiciosScreen() {
                 <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontSize: 20, fontWeight: 500 }}>
-                      {s.price.toLocaleString("es-ES", { useGrouping: "always" })} €
+                      {s.price.toLocaleString("es-ES", { useGrouping: "always" as any })} €
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text-muted)" }}>+ {s.vat}% IVA</div>
                   </div>

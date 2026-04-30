@@ -89,7 +89,7 @@ export function ProformasScreen() {
                   <Td muted>{p.concept}</Td>
                   <Td muted>{D.fmtShort(p.issueDate)}</Td>
                   <Td muted>{D.fmtShort(p.validUntil)}</Td>
-                  <Td align="right" mono style={{ fontWeight: 500 }}>{p.amount.toLocaleString("es-ES", { useGrouping: "always" })} €</Td>
+                  <Td align="right" mono style={{ fontWeight: 500 }}>{p.amount.toLocaleString("es-ES", { useGrouping: "always" as any })} €</Td>
                   <Td><Badge tone={statusTone[p.status]}>{p.status}</Badge></Td>
                   <Td>
                     {p.linkedQuoteId && (
