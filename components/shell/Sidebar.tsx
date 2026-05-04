@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Icon, Avatar } from "@/components/ui";
+import { Icon, Avatar, Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui";
 import { LogoIcon } from "./Logo";
 import { NAV, isNavItem, NavChild, NavItemDef } from "./nav";
 import * as DMData from "@/lib/data";
@@ -24,6 +24,14 @@ export function Sidebar({
   }, [activeParent]);
 
   const setRoute = (p: string) => router.push(p);
+
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    // Hard refresh para limpiar caches y forzar redirect al login
+    window.location.href = "/login";
+  };
 
   function NavItem({ item }: { item: NavItemDef }) {
     const hasChildren = !!item.children?.length;
@@ -185,24 +193,42 @@ export function Sidebar({
             <Icon name="chevronDown" size={14} style={{ color: "var(--text-muted)" }} />
           </div>
         )}
-        <div
-          style={{
-            display: "flex", alignItems: "center", gap: 10,
-            padding: collapsed ? 6 : "6px 10px", borderRadius: 8,
-            justifyContent: collapsed ? "center" : "flex-start", cursor: "pointer",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        <Dropdown
+          align="start"
+          trigger={
+            <button
+              style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%",
+                padding: collapsed ? 6 : "6px 10px", borderRadius: 8,
+                justifyContent: collapsed ? "center" : "flex-start", cursor: "pointer",
+                background: "transparent", border: "none",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <Avatar user={DMData.USERS[0]} size={26} />
+              {!collapsed && (
+                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                  <div style={{ fontSize: 12, fontWeight: 500 }}>Dani Mestre</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>dani@mestre.co</div>
+                </div>
+              )}
+              {!collapsed && <Icon name="chevronUp" size={14} style={{ color: "var(--text-muted)" }} />}
+            </button>
+          }
         >
-          <Avatar user={DMData.USERS[0]} size={26} />
-          {!collapsed && (
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 500 }}>Dani Mestre</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>dani@mestre.co</div>
-            </div>
-          )}
-          {!collapsed && <Icon name="settings" size={14} style={{ color: "var(--text-muted)" }} />}
-        </div>
+          <DropdownItem leftIcon={<Icon name="settings" size={13} />}>
+            Ajustes
+          </DropdownItem>
+          <DropdownSeparator />
+          <DropdownItem
+            danger
+            leftIcon={<Icon name="x" size={13} />}
+            onClick={logout}
+          >
+            Cerrar sesión
+          </DropdownItem>
+        </Dropdown>
         {collapsed && (
           <button
             onClick={() => setCollapsed(false)}

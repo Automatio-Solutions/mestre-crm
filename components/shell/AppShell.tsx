@@ -19,6 +19,8 @@ const STORAGE_KEY = "dm-crm-tweaks";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
   const isPublicPortal = pathname.startsWith("/portal");
+  const isLoginPage = pathname === "/login";
+  const isCleanLayout = isPublicPortal || isLoginPage;
 
   const [collapsed, setCollapsed] = useState(TWEAK_DEFAULTS.sidebarCollapsed);
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -67,8 +69,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const updateTweak = <K extends keyof Tweaks>(key: K, value: Tweaks[K]) =>
     setTweaks((t) => ({ ...t, [key]: value }));
 
-  // Portal público de cliente: layout limpio sin sidebar/header de la agencia
-  if (isPublicPortal) {
+  // Layout limpio sin sidebar/header de la agencia:
+  //  - Portal público de cliente (/portal/c/...)
+  //  - Pantalla de login (/login)
+  if (isCleanLayout) {
     return (
       <ToastProvider>
         <ConfirmProvider>
