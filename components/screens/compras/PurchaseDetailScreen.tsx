@@ -178,8 +178,14 @@ export function PurchaseDetailScreen({ purchaseId }: { purchaseId: string }) {
             <div style={sectionHeader}>Totales</div>
             <SummaryRow label="Base imponible" value={<span style={{ }}>{p.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>} />
             <SummaryRow label={`IVA (${p.vatPct}%)`} value={<span style={{ }}>{p.vat.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>} />
+            {p.retention > 0 && (
+              <SummaryRow
+                label={`Retención IRPF (${p.retentionPct}%)`}
+                value={<span style={{ color: "var(--text-muted)" }}>−{p.retention.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>}
+              />
+            )}
             <SummaryRow
-              label="Total"
+              label={p.retention > 0 ? "Total a pagar" : "Total"}
               value={<span style={{ fontWeight: 600 }}>{p.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>}
               last
             />

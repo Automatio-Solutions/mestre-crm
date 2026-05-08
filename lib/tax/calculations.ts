@@ -157,10 +157,23 @@ export function calcTaxSummary(
   purchases.forEach((p) => {
     if (p.issueDate.getFullYear() !== year) return;
     if (p.status === "borrador") return;
-    const cur = compras.get(p.vatPct || 0) || { base: 0, importe: 0 };
-    cur.base += p.base;
-    cur.importe += p.vat || 0;
-    compras.set(p.vatPct || 0, cur);
+    if (p.lines && p.lines.length > 0) {
+      // Si la compra tiene desglose, agrupamos por el IVA real de cada línea
+      // (esto soporta facturas con varios tipos: 21% + 10%).
+      p.lines.forEach((l) => {
+        const sub = lineSubtotal(l);
+        const imp = lineVat(l);
+        const cur = compras.get(l.vat || 0) || { base: 0, importe: 0 };
+        cur.base += sub;
+        cur.importe += imp;
+        compras.set(l.vat || 0, cur);
+      });
+    } else {
+      const cur = compras.get(p.vatPct || 0) || { base: 0, importe: 0 };
+      cur.base += p.base;
+      cur.importe += p.vat || 0;
+      compras.set(p.vatPct || 0, cur);
+    }
   });
 
   const sortDesc = (a: TaxSummaryRow, b: TaxSummaryRow) => b.vatPct - a.vatPct;

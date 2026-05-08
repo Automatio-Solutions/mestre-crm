@@ -10,8 +10,40 @@ import {
 import { usePurchases } from "@/lib/db/usePurchases";
 import { useContacts } from "@/lib/db/useContacts";
 import { uploadScan, deleteScan } from "@/lib/storage/expenseScans";
-import type { ScanResult, ScanModel } from "@/lib/scan/types";
+import type { ScanResult, ScanModel, ScanLine } from "@/lib/scan/types";
 import { CATEGORIES_HINT } from "@/lib/scan/types";
+
+// ============================================================
+// Helpers de cálculo de líneas (mismas fórmulas que InvoiceLine)
+// ============================================================
+const lineSubtotal = (l: ScanLine) =>
+  (l.quantity || 0) * (l.price || 0) * (1 - (l.discount || 0) / 100);
+const lineVat = (l: ScanLine) => lineSubtotal(l) * ((l.vat || 0) / 100);
+
+function recomputeFromLines(lines: ScanLine[], retention: number) {
+  const base = lines.reduce((s, l) => s + lineSubtotal(l), 0);
+  const vat = lines.reduce((s, l) => s + lineVat(l), 0);
+  // vatPct dominante = el tipo cuyo subtotal pesa más
+  const buckets = new Map<number, number>();
+  lines.forEach((l) => buckets.set(l.vat || 0, (buckets.get(l.vat || 0) || 0) + lineSubtotal(l)));
+  const vatPct =
+    Array.from(buckets.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  return {
+    base: +base.toFixed(2),
+    vat: +vat.toFixed(2),
+    vatPct,
+    total: +(base + vat - (retention || 0)).toFixed(2),
+  };
+}
+
+const emptyScanLine = (): ScanLine => ({
+  concept: "",
+  description: null,
+  quantity: 1,
+  price: 0,
+  vat: 21,
+  discount: 0,
+});
 
 type ItemStatus = "queued" | "uploading" | "scanning" | "review" | "saving" | "saved" | "error";
 type PStatus = "borrador" | "pendiente" | "pagada" | "vencida";
@@ -169,7 +201,42 @@ export function EscanerScreen() {
     if (!selected) return;
     const cur = selected.edited || selected.result;
     if (!cur) return;
+
+    // Cross-update: si cambia la retención, recalcula el total = base + vat - retention
+    if (key === "retention") {
+      const ret = Number(value) || 0;
+      const total = +((cur.base ?? 0) + (cur.vat ?? 0) - ret).toFixed(2);
+      updateItem(selected.id, { edited: { ...cur, retention: ret, total } });
+      return;
+    }
+    if (key === "retentionPct") {
+      const pct = Number(value) || 0;
+      const ret = +(((cur.base ?? 0) * pct) / 100).toFixed(2);
+      const total = +((cur.base ?? 0) + (cur.vat ?? 0) - ret).toFixed(2);
+      updateItem(selected.id, {
+        edited: { ...cur, retentionPct: pct, retention: ret, total },
+      });
+      return;
+    }
     updateItem(selected.id, { edited: { ...cur, [key]: value } });
+  };
+
+  // ---- editar líneas (recomputa base/vat/vatPct/total) ----
+  const editLines = (newLines: ScanLine[]) => {
+    if (!selected) return;
+    const cur = selected.edited || selected.result;
+    if (!cur) return;
+    const { base, vat, vatPct, total } = recomputeFromLines(newLines, cur.retention ?? 0);
+    updateItem(selected.id, {
+      edited: {
+        ...cur,
+        lines: newLines,
+        base,
+        vat,
+        vatPct: vatPct ?? cur.vatPct,
+        total,
+      },
+    });
   };
 
   // ---- editar campos manuales (no OCR) ----
@@ -204,8 +271,22 @@ export function EscanerScreen() {
       const payDate = selected.payDate ? new Date(selected.payDate) : null;
       const base = data.base ?? 0;
       const vat = data.vat ?? 0;
-      const total = data.total ?? base + vat;
+      const retention = data.retention ?? 0;
+      const retentionPct = data.retentionPct ?? 0;
+      const total = data.total ?? base + vat - retention;
       const vatPct = data.vatPct ?? 21;
+
+      // Mapear ScanLine[] → PurchaseLine[] (idéntica forma + id)
+      const purchaseLines = (data.lines || []).map((l, i) => ({
+        id: `l-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}-${i}`,
+        concept: l.concept || "",
+        description: l.description || "",
+        quantity: l.quantity || 0,
+        price: l.price || 0,
+        vat: l.vat || 0,
+        discount: l.discount || 0,
+        serviceId: null,
+      }));
 
       const purchase = await createPurchase({
         supplierId,
@@ -217,12 +298,14 @@ export function EscanerScreen() {
         base,
         vatPct,
         vat,
+        retentionPct,
+        retention,
         total,
         status: selected.pStatus || "pendiente",
         paymentMethod: selected.pMethod || "transferencia",
         source: "scan",
         account: selected.account?.trim() || null,
-        lines: [],
+        lines: purchaseLines,
         tags: [],
         attachments: selected.publicUrl ? [selected.publicUrl] : [],
         internalNote: selected.internalNote?.trim() || null,
@@ -334,6 +417,7 @@ export function EscanerScreen() {
             contacts={contacts}
             onEdit={editField}
             onEditMeta={editMeta}
+            onEditLines={editLines}
             onConfirm={confirmAndCreate}
             onDiscard={discard}
             onClose={() => setSelectedId(null)}
@@ -462,12 +546,13 @@ function QueueList({
 // DETAIL PANEL (derecha)
 // ============================================================
 function DetailPanel({
-  item, contacts, onEdit, onEditMeta, onConfirm, onDiscard, onClose, onOpenPurchase,
+  item, contacts, onEdit, onEditMeta, onEditLines, onConfirm, onDiscard, onClose, onOpenPurchase,
 }: {
   item: ScanItem;
   contacts: any[];
   onEdit: (k: keyof ScanResult, v: any) => void;
   onEditMeta: (k: "pStatus" | "pMethod" | "payDate" | "internalNote" | "account", v: any) => void;
+  onEditLines: (lines: ScanLine[]) => void;
   onConfirm: () => void;
   onDiscard: () => void;
   onClose: () => void;
@@ -698,6 +783,12 @@ function DetailPanel({
             </Field>
           </div>
 
+          {/* Tabla de líneas (solo si OCR detectó >=1 línea) */}
+          {data.lines && data.lines.length > 0 && (
+            <ScanLinesEditor lines={data.lines} onChange={onEditLines} />
+          )}
+
+          {/* Importes globales del documento. Si hay líneas, base/IVA% se calculan solos. */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
             <Field label="Base">
               <Input
@@ -705,6 +796,7 @@ function DetailPanel({
                 step="0.01"
                 value={data.base ?? ""}
                 onChange={(e) => onEdit("base", e.target.value === "" ? null : Number(e.target.value))}
+                disabled={data.lines && data.lines.length > 0}
               />
             </Field>
             <Field label="IVA %">
@@ -712,6 +804,7 @@ function DetailPanel({
                 type="number"
                 value={data.vatPct ?? ""}
                 onChange={(e) => onEdit("vatPct", e.target.value === "" ? null : Number(e.target.value))}
+                disabled={data.lines && data.lines.length > 0}
               />
             </Field>
             <Field label="IVA €">
@@ -720,6 +813,7 @@ function DetailPanel({
                 step="0.01"
                 value={data.vat ?? ""}
                 onChange={(e) => onEdit("vat", e.target.value === "" ? null : Number(e.target.value))}
+                disabled={data.lines && data.lines.length > 0}
               />
             </Field>
             <Field label="Total">
@@ -728,6 +822,28 @@ function DetailPanel({
                 step="0.01"
                 value={data.total ?? ""}
                 onChange={(e) => onEdit("total", e.target.value === "" ? null : Number(e.target.value))}
+              />
+            </Field>
+          </div>
+
+          {/* Retención IRPF (si la factura la lleva) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Retención IRPF %">
+              <Input
+                type="number"
+                step="0.01"
+                value={data.retentionPct ?? ""}
+                onChange={(e) => onEdit("retentionPct", e.target.value === "" ? null : Number(e.target.value))}
+                placeholder="0"
+              />
+            </Field>
+            <Field label="Retención €">
+              <Input
+                type="number"
+                step="0.01"
+                value={data.retention ?? ""}
+                onChange={(e) => onEdit("retention", e.target.value === "" ? null : Number(e.target.value))}
+                placeholder="0,00"
               />
             </Field>
           </div>
@@ -923,6 +1039,137 @@ function MethodSelect({ value, onChange }: { value: PMethod; onChange: (v: PMeth
     </Dropdown>
   );
 }
+
+// ============================================================
+// SCAN LINES EDITOR — tabla editable de líneas
+// ============================================================
+function ScanLinesEditor({
+  lines, onChange,
+}: {
+  lines: ScanLine[];
+  onChange: (lines: ScanLine[]) => void;
+}) {
+  const update = (idx: number, patch: Partial<ScanLine>) =>
+    onChange(lines.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  const remove = (idx: number) =>
+    onChange(lines.filter((_, i) => i !== idx));
+  const add = () => onChange([...lines, emptyScanLine()]);
+
+  return (
+    <div>
+      <div style={{
+        fontSize: 10.5, fontWeight: 500, color: "var(--text-muted)",
+        textTransform: "uppercase", letterSpacing: "0.05em",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: 6,
+      }}>
+        <span>Líneas detectadas ({lines.length})</span>
+        <button
+          onClick={add}
+          style={{
+            fontSize: 11, fontWeight: 500, color: "var(--purple)",
+            display: "inline-flex", alignItems: "center", gap: 3,
+            padding: "2px 6px", borderRadius: 5,
+          }}
+        >
+          <Icon name="plus" size={11}/> Añadir línea
+        </button>
+      </div>
+      <div style={{
+        border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden",
+        background: "var(--surface)",
+      }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+          <thead>
+            <tr style={{ background: "var(--beige-bg)" }}>
+              <th style={lineTh}>Concepto</th>
+              <th style={{ ...lineTh, width: 56, textAlign: "right" }}>Cant.</th>
+              <th style={{ ...lineTh, width: 80, textAlign: "right" }}>Precio</th>
+              <th style={{ ...lineTh, width: 64 }}>IVA</th>
+              <th style={{ ...lineTh, width: 80, textAlign: "right" }}>Subtotal</th>
+              <th style={{ ...lineTh, width: 28 }}/>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, idx) => (
+              <tr key={idx} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={lineTd}>
+                  <input
+                    value={l.concept}
+                    onChange={(e) => update(idx, { concept: e.target.value })}
+                    placeholder="Concepto"
+                    style={lineInput}
+                  />
+                </td>
+                <td style={{ ...lineTd, textAlign: "right" }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={l.quantity === 0 ? "" : l.quantity}
+                    onChange={(e) => update(idx, { quantity: Number(e.target.value) || 0 })}
+                    style={{ ...lineInput, textAlign: "right" }}
+                  />
+                </td>
+                <td style={{ ...lineTd, textAlign: "right" }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={l.price === 0 ? "" : l.price}
+                    onChange={(e) => update(idx, { price: Number(e.target.value) || 0 })}
+                    style={{ ...lineInput, textAlign: "right" }}
+                  />
+                </td>
+                <td style={lineTd}>
+                  <select
+                    value={l.vat}
+                    onChange={(e) => update(idx, { vat: Number(e.target.value) })}
+                    style={lineInput}
+                  >
+                    {[0, 4, 10, 21].map((v) => (
+                      <option key={v} value={v}>{v}%</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={{ ...lineTd, textAlign: "right", paddingRight: 10, fontWeight: 500 }}>
+                  {lineSubtotal(l).toLocaleString("es-ES", {
+                    useGrouping: "always" as any,
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} €
+                </td>
+                <td style={{ ...lineTd, textAlign: "center" }}>
+                  <button
+                    onClick={() => remove(idx)}
+                    disabled={lines.length <= 1}
+                    style={{
+                      color: "var(--text-faint)",
+                      padding: 4,
+                      opacity: lines.length <= 1 ? 0.3 : 1,
+                    }}
+                    title="Eliminar línea"
+                  >
+                    <Icon name="trash" size={11}/>
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const lineTh: React.CSSProperties = {
+  textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 500,
+  color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em",
+};
+const lineTd: React.CSSProperties = { padding: "2px 0", verticalAlign: "middle" };
+const lineInput: React.CSSProperties = {
+  width: "100%", height: 30, padding: "0 10px",
+  border: "1px solid transparent", background: "transparent",
+  outline: "none", fontSize: 12.5, fontFamily: "inherit",
+};
 
 function CategorySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (

@@ -19,6 +19,8 @@ export interface Purchase {
   base: number;
   vatPct: number;
   vat: number;
+  retentionPct: number;
+  retention: number;
   total: number;
   status: PurchaseStatus;
   paymentMethod: PurchasePaymentMethod;
@@ -41,6 +43,8 @@ export interface NewPurchase {
   base: number;
   vatPct: number;
   vat: number;
+  retentionPct?: number;
+  retention?: number;
   total: number;
   status?: PurchaseStatus;
   paymentMethod?: PurchasePaymentMethod;
@@ -66,6 +70,8 @@ const fromRow = (r: any): Purchase => ({
   base: Number(r.base),
   vatPct: Number(r.vat_pct),
   vat: Number(r.vat),
+  retentionPct: Number(r.retention_pct ?? 0),
+  retention: Number(r.retention ?? 0),
   total: Number(r.total),
   status: r.status,
   paymentMethod: r.payment_method || "transferencia",
@@ -90,6 +96,8 @@ const toRow = (p: Partial<Purchase>) => {
   if (p.base !== undefined) r.base = p.base;
   if (p.vatPct !== undefined) r.vat_pct = p.vatPct;
   if (p.vat !== undefined) r.vat = p.vat;
+  if (p.retentionPct !== undefined) r.retention_pct = p.retentionPct;
+  if (p.retention !== undefined) r.retention = p.retention;
   if (p.total !== undefined) r.total = p.total;
   if (p.status !== undefined) r.status = p.status;
   if (p.paymentMethod !== undefined) r.payment_method = p.paymentMethod;
@@ -120,6 +128,8 @@ export async function createPurchase(input: NewPurchase): Promise<Purchase> {
     status: input.status ?? "pendiente",
     paymentMethod: input.paymentMethod ?? "transferencia",
     source: input.source ?? "upload",
+    retentionPct: input.retentionPct ?? 0,
+    retention: input.retention ?? 0,
     lines: input.lines ?? [],
     tags: input.tags ?? [],
     attachments: input.attachments ?? [],

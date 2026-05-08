@@ -48,7 +48,7 @@ export const NAV: NavEntry[] = [
   { id: "impuestos", label: "Impuestos", icon: "landmark", path: "/impuestos" },
   { id: "analitica", label: "Analítica", icon: "chart", path: "/analitica" },
   { type: "sep" },
-  { id: "clientes", label: "Clientes", icon: "folder", path: "/clientes", section: "proyectos" },
+  { id: "clientes", label: "Espacio de trabajo", icon: "folder", path: "/clientes", section: "proyectos" },
 ];
 
 export function isNavItem(e: NavEntry): e is NavItemDef {

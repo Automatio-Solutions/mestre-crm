@@ -34,6 +34,8 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
   const [tagsInput, setTagsInput] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [showDiscount, setShowDiscount] = useState(false);
+  const [retentionPct, setRetentionPct] = useState<number>(0);
+  const [showRetention, setShowRetention] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -53,6 +55,8 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
       setTagsInput((editing.tags || []).join(", "));
       setInternalNote(editing.internalNote || "");
       setShowDiscount(editing.lines.some((l) => l.discount > 0));
+      setRetentionPct(editing.retentionPct || 0);
+      setShowRetention((editing.retentionPct || 0) > 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing?.id]);
@@ -60,6 +64,12 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
   const totals = useMemo(() => calcInvoiceTotals(lines), [lines]);
   const vatPct = lines.length > 0 ? lines[0].vat : 21;
   const hasDiscount = showDiscount || lines.some((l) => l.discount > 0);
+  const retention = useMemo(
+    () => +(totals.base * ((retentionPct || 0) / 100)).toFixed(2),
+    [totals.base, retentionPct],
+  );
+  const hasRetention = showRetention || retentionPct > 0;
+  const finalTotal = +(totals.total - retention).toFixed(2);
 
   const updateLine = (id: string, patch: Partial<PurchaseLine>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -83,7 +93,9 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
         base: totals.base,
         vatPct,
         vat: totals.vat,
-        total: totals.total,
+        retentionPct: retentionPct || 0,
+        retention,
+        total: finalTotal,
         status,
         paymentMethod,
         source: "upload" as const,
@@ -263,7 +275,7 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
               padding: "10px 16px", borderTop: "1px solid var(--border)", background: "var(--beige-bg)",
             }}
           >
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Button variant="outline" size="sm" leftIcon={<Icon name="plus" size={13} />} onClick={addLine}>
                 Añadir línea
               </Button>
@@ -277,8 +289,45 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
                   Ocultar descuento
                 </Button>
               )}
+              {!hasRetention && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Icon name="plus" size={13} />}
+                  onClick={() => { setShowRetention(true); setRetentionPct(15); }}
+                >
+                  Aplicar retención IRPF
+                </Button>
+              )}
+              {hasRetention && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                  <span style={{ color: "var(--text-muted)" }}>Retención IRPF</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={retentionPct === 0 ? "" : retentionPct}
+                    onChange={(e) => setRetentionPct(Number(e.target.value) || 0)}
+                    placeholder="15"
+                    style={{
+                      width: 60, height: 28, padding: "0 8px",
+                      border: "1px solid var(--border)", borderRadius: 6,
+                      background: "var(--surface)", textAlign: "right", fontSize: 12.5,
+                    }}
+                  />
+                  <span style={{ color: "var(--text-muted)" }}>%</span>
+                  <button
+                    onClick={() => { setShowRetention(false); setRetentionPct(0); }}
+                    title="Quitar retención"
+                    style={{ color: "var(--text-faint)", padding: 4 }}
+                  >
+                    <Icon name="x" size={11} />
+                  </button>
+                </div>
+              )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, minWidth: 240 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, minWidth: 260 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--text-muted)" }}>Subtotal</span>
                 <span>{totals.base.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
@@ -287,9 +336,15 @@ export function NewPurchaseScreen({ purchaseId }: { purchaseId?: string } = {}) 
                 <span style={{ color: "var(--text-muted)" }}>IVA soportado</span>
                 <span>{totals.vat.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
               </div>
+              {hasRetention && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--text-muted)" }}>Retención IRPF ({retentionPct}%)</span>
+                  <span>−{retention.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6, borderTop: "1px solid var(--border)", fontWeight: 600, fontSize: 15 }}>
-                <span>Total</span>
-                <span>{totals.total.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                <span>Total a pagar</span>
+                <span>{finalTotal.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
               </div>
             </div>
           </div>

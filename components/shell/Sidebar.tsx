@@ -5,6 +5,7 @@ import { Icon, Avatar, Dropdown, DropdownItem, DropdownSeparator } from "@/compo
 import { LogoIcon } from "./Logo";
 import { NAV, isNavItem, NavChild, NavItemDef } from "./nav";
 import * as DMData from "@/lib/data";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 export function Sidebar({
   collapsed, setCollapsed,
@@ -24,14 +25,9 @@ export function Sidebar({
   }, [activeParent]);
 
   const setRoute = (p: string) => router.push(p);
-
-  const logout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {}
-    // Hard refresh para limpiar caches y forzar redirect al login
-    window.location.href = "/login";
-  };
+  const { user, logout } = useAuth();
+  // Usuario para el avatar (vincula con el array USERS de mocks si existe userRef)
+  const teamUser = (user?.userRef ? DMData.userById(user.userRef) : null) || DMData.USERS[0];
 
   function NavItem({ item }: { item: NavItemDef }) {
     const hasChildren = !!item.children?.length;
@@ -168,33 +164,11 @@ export function Sidebar({
         ))}
       </nav>
 
-      {/* Workspace + User */}
+      {/* User menu (logout / ajustes) */}
       <div style={{ borderTop: "1px solid var(--border-strong)", padding: collapsed ? 8 : 10 }}>
-        {!collapsed && (
-          <div
-            style={{
-              display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-              borderRadius: 8, background: "rgba(0,0,0,0.04)", marginBottom: 8, cursor: "pointer",
-            }}
-          >
-            <div
-              style={{
-                width: 28, height: 28, borderRadius: 7, background: "var(--black)",
-                color: "var(--beige)", display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 12, fontWeight: 700,
-              }}
-            >
-              DM
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 500 }}>Dani Mestre</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Workspace</div>
-            </div>
-            <Icon name="chevronDown" size={14} style={{ color: "var(--text-muted)" }} />
-          </div>
-        )}
         <Dropdown
           align="start"
+          direction="up"
           trigger={
             <button
               style={{
@@ -206,11 +180,11 @@ export function Sidebar({
               onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
-              <Avatar user={DMData.USERS[0]} size={26} />
+              <Avatar user={teamUser} size={26} />
               {!collapsed && (
                 <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>Dani Mestre</div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>dani@mestre.co</div>
+                  <div style={{ fontSize: 12, fontWeight: 500 }}>{user?.name || teamUser?.name || "—"}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{user?.email || ""}</div>
                 </div>
               )}
               {!collapsed && <Icon name="chevronUp" size={14} style={{ color: "var(--text-muted)" }} />}

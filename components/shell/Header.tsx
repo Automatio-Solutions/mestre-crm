@@ -18,7 +18,7 @@ const labelMap: Record<string, string> = {
   contabilidad: "Contabilidad",
   impuestos: "Impuestos",
   analitica: "Analítica",
-  clientes: "Clientes",
+  clientes: "Espacio de trabajo",
   facturas: "Facturas",
   presupuestos: "Presupuestos",
   proformas: "Proformas",

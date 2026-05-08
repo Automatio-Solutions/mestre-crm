@@ -296,8 +296,14 @@ export function Input({ leftIcon, style, onFocus, onBlur, ...props }: InputProps
 
 // -------- Dropdown --------
 export function Dropdown({
-  trigger, children, align = "start", width = 220,
-}: { trigger: React.ReactNode; children: React.ReactNode; align?: "start" | "end"; width?: number }) {
+  trigger, children, align = "start", width = 220, direction = "down",
+}: {
+  trigger: React.ReactNode;
+  children: React.ReactNode;
+  align?: "start" | "end";
+  width?: number;
+  direction?: "down" | "up";
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -307,6 +313,9 @@ export function Dropdown({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+  const verticalStyle: React.CSSProperties = direction === "up"
+    ? { bottom: "calc(100% + 6px)" }
+    : { top: "calc(100% + 6px)" };
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
@@ -314,7 +323,7 @@ export function Dropdown({
         <div
           style={{
             position: "absolute",
-            top: "calc(100% + 6px)",
+            ...verticalStyle,
             [align === "end" ? "right" : "left"]: 0,
             minWidth: width,
             background: "var(--surface)",

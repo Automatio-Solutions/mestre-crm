@@ -6,6 +6,7 @@ import { Header } from "./Header";
 import { CommandPalette } from "./CommandPalette";
 import { TweaksPanel, Tweaks } from "./TweaksPanel";
 import { ToastProvider, ConfirmProvider } from "@/components/ui";
+import { AuthProvider } from "@/lib/auth/AuthContext";
 
 const TWEAK_DEFAULTS: Tweaks = {
   accent: "#6A5ACD",
@@ -85,6 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
       <ConfirmProvider>
+      <AuthProvider>
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -92,23 +94,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <main style={{ flex: 1, minHeight: 0 }}>{children}</main>
         </div>
         <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
-        <button
-          aria-label="Abrir tweaks"
-          onClick={() => setTweaksOpen((o) => !o)}
-          style={{
-            position: "fixed", bottom: 20, left: 20, width: 36, height: 36,
-            borderRadius: 10, background: "var(--surface)",
-            border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "var(--text-muted)", zIndex: 250,
-          }}
-        >
-          <span style={{ fontSize: 16 }}>⚙︎</span>
-        </button>
-        {tweaksOpen && (
-          <TweaksPanel tweaks={tweaks} update={updateTweak} onClose={() => setTweaksOpen(false)} />
-        )}
       </div>
+      </AuthProvider>
       </ConfirmProvider>
     </ToastProvider>
   );

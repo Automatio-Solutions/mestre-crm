@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { SCAN_SYSTEM_PROMPT, SCAN_USER_PROMPT } from "@/lib/scan/prompt";
-import type { ScanResponse, ScanErrorResponse, ScanResult } from "@/lib/scan/types";
+import type { ScanResponse, ScanErrorResponse, ScanResult, ScanLine } from "@/lib/scan/types";
 
 // Estos modelos son alias hacia las versiones más recientes:
 const MODELS = {
@@ -183,6 +183,27 @@ function normalizeResult(raw: any): ScanResult {
     ? raw.warnings.map((w: any) => String(w)).filter(Boolean)
     : [];
 
+  const lines: ScanLine[] = Array.isArray(raw.lines)
+    ? raw.lines
+        .map((l: any) => {
+          const concept = str(l?.concept);
+          if (!concept) return null;
+          const quantity = num(l?.quantity);
+          const price = num(l?.price);
+          const vat = num(l?.vat);
+          const discount = num(l?.discount);
+          return {
+            concept,
+            description: str(l?.description),
+            quantity: quantity ?? 1,
+            price: price ?? 0,
+            vat: vat ?? 0,
+            discount: discount ?? 0,
+          } as ScanLine;
+        })
+        .filter(Boolean) as ScanLine[]
+    : [];
+
   return {
     supplierName: str(raw.supplierName),
     supplierNif: str(raw.supplierNif),
@@ -191,9 +212,12 @@ function normalizeResult(raw: any): ScanResult {
     base: num(raw.base),
     vat: num(raw.vat),
     vatPct: num(raw.vatPct),
+    retentionPct: num(raw.retentionPct),
+    retention: num(raw.retention),
     total: num(raw.total),
     category: str(raw.category),
     concept: str(raw.concept),
+    lines,
     confidence: typeof raw.confidence === "number" ? Math.max(0, Math.min(1, raw.confidence)) : 0,
     warnings: warningsArr,
   };
