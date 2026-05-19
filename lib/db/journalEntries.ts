@@ -162,7 +162,7 @@ export async function createJournalEntry(input: NewJournalEntry): Promise<Journa
 
 export async function updateJournalEntry(
   id: string,
-  patch: Partial<JournalEntry> & { lines?: Array<Omit<JournalLine, "id" | "entryId" | "lineNo">> },
+  patch: Partial<Omit<JournalEntry, "lines">> & { lines?: Array<Omit<JournalLine, "id" | "entryId" | "lineNo">> },
 ): Promise<JournalEntry> {
   const headerPatch: Record<string, unknown> = {};
   if (patch.number !== undefined) headerPatch.number = patch.number;

@@ -12,7 +12,7 @@ export interface UseJournalEntriesState {
   error: Error | null;
   refresh: () => Promise<void>;
   create: (input: NewJournalEntry) => Promise<JournalEntry>;
-  update: (id: string, patch: Partial<JournalEntry> & { lines?: NewJournalEntry["lines"] }) => Promise<JournalEntry>;
+  update: (id: string, patch: Partial<Omit<JournalEntry, "lines">> & { lines?: NewJournalEntry["lines"] }) => Promise<JournalEntry>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -42,7 +42,7 @@ export function useJournalEntries(): UseJournalEntriesState {
   }, []);
 
   const update = useCallback(
-    async (id: string, patch: Partial<JournalEntry> & { lines?: NewJournalEntry["lines"] }) => {
+    async (id: string, patch: Partial<Omit<JournalEntry, "lines">> & { lines?: NewJournalEntry["lines"] }) => {
       const updated = await apiUpdate(id, patch);
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
       return updated;
