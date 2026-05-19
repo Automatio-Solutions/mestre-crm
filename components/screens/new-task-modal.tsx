@@ -2,10 +2,12 @@
 "use client";
 import * as React from "react";
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import * as D from "@/lib/data";
 import {
   Icon, Button, Modal, Avatar, Dropdown, DropdownItem, DropdownSeparator, PriorityFlag,
 } from "@/components/ui";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 /**
  * NewTaskModal
@@ -29,9 +31,11 @@ const PRIORITIES_FORM = [
 ];
 
 export const NewTaskModal = ({ open, onClose, onSubmit, projects = [], defaultModuleId = null }) => {
+  const { user } = useAuth();
+  const currentUserRef = user?.userRef || null;
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [moduleId, setModuleId] = useState(defaultModuleId || (projects[0]?.id ?? ""));
+  const [moduleId, setModuleId] = useState(defaultModuleId || "");
   const [assignees, setAssignees] = useState([]); // sin Dani por defecto
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("media");
@@ -49,7 +53,7 @@ export const NewTaskModal = ({ open, onClose, onSubmit, projects = [], defaultMo
     if (!open) return;
     setTitle("");
     setDescription("");
-    setModuleId(defaultModuleId || (projects[0]?.id ?? ""));
+    setModuleId(defaultModuleId || "");
     setAssignees([]);
     setDueDate("");
     setPriority("media");
@@ -191,44 +195,14 @@ export const NewTaskModal = ({ open, onClose, onSubmit, projects = [], defaultMo
           <Row label="Proyecto">
             {projects.length === 0 ? (
               <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
-                Este cliente no tiene proyectos. Crea uno antes de añadir tareas.
+                Aún no hay proyectos. Crea uno antes de añadir tareas.
               </span>
             ) : (
-              <Dropdown
-                align="start"
-                trigger={
-                  <button
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 8,
-                      padding: "6px 12px",
-                      background: "var(--surface)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 7, fontSize: 13, fontWeight: 500,
-                      minWidth: 220, justifyContent: "space-between",
-                    }}
-                  >
-                    {moduleId ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 14 }}>{projects.find(p => p.id === moduleId)?.icon}</span>
-                        {projects.find(p => p.id === moduleId)?.name || "—"}
-                      </span>
-                    ) : (
-                      <span style={{ color: "var(--text-faint)" }}>Selecciona un proyecto</span>
-                    )}
-                    <Icon name="chevronDown" size={12} style={{ color: "var(--text-muted)" }} />
-                  </button>
-                }
-              >
-                {projects.map((p) => (
-                  <DropdownItem
-                    key={p.id}
-                    leftIcon={<span style={{ fontSize: 14 }}>{p.icon}</span>}
-                    onClick={() => setModuleId(p.id)}
-                  >
-                    {p.name}
-                  </DropdownItem>
-                ))}
-              </Dropdown>
+              <ProjectAutocomplete
+                projects={projects}
+                value={moduleId}
+                onChange={setModuleId}
+              />
             )}
           </Row>
 
@@ -255,7 +229,7 @@ export const NewTaskModal = ({ open, onClose, onSubmit, projects = [], defaultMo
                     }}
                   >
                     <Avatar user={u} size={20} />
-                    {u.name}{uid === "u1" ? <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> (tú)</span> : null}
+                    {u.name}{uid === currentUserRef ? <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> (tú)</span> : null}
                     <button
                       onClick={() => toggleAssignee(uid)}
                       style={{ color: "var(--text-faint)", padding: 1, marginLeft: 2 }}
@@ -588,3 +562,173 @@ const Row = ({ label, children }) => (
     <div>{children}</div>
   </div>
 );
+
+// ============================================================
+// ProjectAutocomplete — input con sugerencias filtradas al escribir
+// Reemplaza al dropdown clásico para listas largas (cross-cliente).
+// ============================================================
+const ProjectAutocomplete = ({ projects, value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [hoverIdx, setHoverIdx] = useState(0);
+  const [popupPos, setPopupPos] = useState(null);
+  const [mounted, setMounted] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => setMounted(true), []);
+
+  const selected = projects.find((p) => p.id === value) || null;
+  const selectedLabel = selected
+    ? `${selected.icon ? `${selected.icon} ` : ""}${selected.name}`
+    : "";
+
+  const filtered = (() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return projects.slice(0, 12);
+    return projects
+      .filter((p) => (p.name || "").toLowerCase().includes(q))
+      .slice(0, 12);
+  })();
+
+  useEffect(() => { setHoverIdx(0); }, [query]);
+
+  useEffect(() => {
+    if (!open || !inputRef.current) { setPopupPos(null); return; }
+    const update = () => {
+      const r = inputRef.current.getBoundingClientRect();
+      setPopupPos({
+        top: r.bottom + 4,
+        left: r.left,
+        width: Math.max(r.width, 280),
+      });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  const pick = (p) => {
+    onChange(p.id);
+    setQuery("");
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  const handleKey = (e) => {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHoverIdx((i) => Math.min(filtered.length - 1, i + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHoverIdx((i) => Math.max(0, i - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filtered[hoverIdx]) pick(filtered[hoverIdx]);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      setQuery("");
+    }
+  };
+
+  const displayValue = open ? query : selectedLabel;
+
+  const popup = open && popupPos && mounted
+    ? createPortal(
+        <div
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: "fixed",
+            top: popupPos.top, left: popupPos.left, width: popupPos.width,
+            maxHeight: 320, overflow: "auto",
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            boxShadow: "var(--shadow-lg)",
+            zIndex: 1000,
+            padding: 4,
+            animation: "slideUp 120ms ease",
+          }}
+        >
+          {filtered.length === 0 ? (
+            <div style={{ padding: "12px 10px", fontSize: 12, color: "var(--text-muted)" }}>
+              {query ? `Sin coincidencias para "${query}"` : "No hay proyectos."}
+            </div>
+          ) : (
+            filtered.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                onMouseEnter={() => setHoverIdx(i)}
+                onClick={() => pick(p)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  width: "100%", padding: "8px 10px", borderRadius: 6,
+                  background: hoverIdx === i ? "var(--beige-bg)" : "transparent",
+                  textAlign: "left", cursor: "pointer",
+                  border: p.id === value ? "1px solid var(--purple-soft)" : "1px solid transparent",
+                }}
+              >
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{p.icon || "📁"}</span>
+                <span style={{
+                  flex: 1, fontSize: 13, fontWeight: 500,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {p.name}
+                </span>
+                {p.id === value && (
+                  <Icon name="check" size={12} style={{ color: "var(--purple)" }} />
+                )}
+              </button>
+            ))
+          )}
+        </div>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div style={{ position: "relative", width: "100%", maxWidth: 360 }}>
+      <input
+        ref={inputRef}
+        value={displayValue}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => { setOpen(true); setQuery(""); }}
+        onBlur={() => setTimeout(() => setOpen(false), 180)}
+        onKeyDown={handleKey}
+        placeholder={selected ? "" : "Escribe para buscar proyecto…"}
+        style={{
+          height: 34, width: "100%",
+          padding: "0 30px 0 12px",
+          border: "1px solid var(--border)", borderRadius: 8,
+          background: "var(--surface)",
+          outline: "none", fontSize: 13.5, fontFamily: "inherit",
+        }}
+      />
+      <Icon
+        name="search"
+        size={12}
+        style={{
+          position: "absolute", right: 10, top: "50%",
+          transform: "translateY(-50%)",
+          color: "var(--text-faint)", pointerEvents: "none",
+        }}
+      />
+      {popup}
+    </div>
+  );
+};

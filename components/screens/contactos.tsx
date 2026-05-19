@@ -33,6 +33,35 @@ export const Contactos = ({ setRoute, initialOpen }: any) => {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
 
+  // ---- Filtros ----
+  const [showFilters, setShowFilters] = useState(false);
+  const [fCity, setFCity] = useState("");
+  const [fTags, setFTags] = useState("");           // tags separadas por coma; match cualquiera
+  const [fFactMin, setFFactMin] = useState("");
+  const [fFactMax, setFFactMax] = useState("");
+  const [fLastInter, setFLastInter] = useState("any"); // any | 7d | 30d | 90d | 365d | older
+  const [fStatus, setFStatus] = useState<string[]>([]); // multi: activo / inactivo / lead
+
+  const cities = useMemo(
+    () => Array.from(new Set(contacts.map((c) => c.city).filter(Boolean))).sort() as string[],
+    [contacts],
+  );
+
+  const activeFilterCount =
+    (fCity ? 1 : 0) +
+    (fTags.trim() ? 1 : 0) +
+    (fFactMin || fFactMax ? 1 : 0) +
+    (fLastInter !== "any" ? 1 : 0) +
+    (fStatus.length > 0 ? 1 : 0);
+
+  const clearFilters = () => {
+    setFCity(""); setFTags(""); setFFactMin(""); setFFactMax("");
+    setFLastInter("any"); setFStatus([]);
+  };
+
+  const toggleStatus = (s: string) =>
+    setFStatus((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+
   useEffect(() => {
     if (initialOpen) setOpenContact(initialOpen);
   }, [initialOpen]);
@@ -58,8 +87,44 @@ export const Contactos = ({ setRoute, initialOpen }: any) => {
         [c.name, c.nif, c.email, c.city].filter(Boolean).join(" ").toLowerCase().includes(lq)
       );
     }
+
+    // --- Filtros avanzados ---
+    if (fCity) r = r.filter((c) => (c.city || "") === fCity);
+
+    if (fTags.trim()) {
+      const wanted = fTags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+      if (wanted.length > 0) {
+        r = r.filter((c) => {
+          const lower = (c.tags || []).map((t: string) => t.toLowerCase());
+          return wanted.some((w) => lower.some((tag) => tag.includes(w)));
+        });
+      }
+    }
+
+    const min = fFactMin === "" ? null : Number(fFactMin);
+    const max = fFactMax === "" ? null : Number(fFactMax);
+    if (min !== null && !Number.isNaN(min)) r = r.filter((c) => (c.facturado || 0) >= min);
+    if (max !== null && !Number.isNaN(max)) r = r.filter((c) => (c.facturado || 0) <= max);
+
+    if (fLastInter !== "any") {
+      const now = Date.now();
+      r = r.filter((c) => {
+        const d = c.lastInteraction ? new Date(c.lastInteraction).getTime() : null;
+        if (d === null) return fLastInter === "older";
+        const diffDays = (now - d) / 86400000;
+        if (fLastInter === "7d") return diffDays <= 7;
+        if (fLastInter === "30d") return diffDays <= 30;
+        if (fLastInter === "90d") return diffDays <= 90;
+        if (fLastInter === "365d") return diffDays <= 365;
+        if (fLastInter === "older") return diffDays > 365;
+        return true;
+      });
+    }
+
+    if (fStatus.length > 0) r = r.filter((c) => fStatus.includes(c.status || ""));
+
     return r;
-  }, [contacts, tab, search]);
+  }, [contacts, tab, search, fCity, fTags, fFactMin, fFactMax, fLastInter, fStatus]);
 
   const contact = openContact ? contacts.find((c) => c.id === openContact) : null;
 
@@ -75,6 +140,39 @@ export const Contactos = ({ setRoute, initialOpen }: any) => {
     }
     setFormOpen(false);
     setEditing(null);
+  };
+
+  const exportCSV = () => {
+    const headers = ["Nombre", "Tipo", "NIF/CIF", "Email", "Teléfono", "Web",
+      "Dirección", "CP", "Ciudad", "Provincia", "País",
+      "Tags", "Facturado", "Última interacción", "Estado"];
+    const esc = (v: any) => {
+      const s = v === null || v === undefined ? "" : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const fmtDate = (d: any) => {
+      if (!d) return "";
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return "";
+      return dt.toISOString().slice(0, 10);
+    };
+    const rows = filtered.map((c) => [
+      c.name, c.type, c.nif, c.email, c.phone, c.website,
+      c.address, c.postalCode, c.city, c.province, c.country,
+      (c.tags || []).join("|"), c.facturado || 0, fmtDate(c.lastInteraction), c.status,
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(esc).join(",")).join("\n");
+    // BOM para que Excel detecte UTF-8 con acentos
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.download = `contactos_${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleDelete = async (id: string) => {
@@ -101,7 +199,6 @@ export const Contactos = ({ setRoute, initialOpen }: any) => {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <Button variant="outline" leftIcon={<Icon name="upload" size={14} />}>Importar CSV</Button>
           <Button variant="primary" leftIcon={<Icon name="plus" size={14} />} onClick={openNew}>
             Nuevo contacto
           </Button>
@@ -127,9 +224,139 @@ export const Contactos = ({ setRoute, initialOpen }: any) => {
             leftIcon={<Icon name="search" size={14} />}
           />
         </div>
-        <Button variant="outline" size="sm" leftIcon={<Icon name="filter" size={14} />}>Filtros</Button>
-        <Button variant="ghost" size="sm" leftIcon={<Icon name="download" size={14} />}>Exportar</Button>
+        <Button
+          variant={showFilters || activeFilterCount > 0 ? "primary" : "outline"}
+          size="sm"
+          leftIcon={<Icon name="filter" size={14} />}
+          onClick={() => setShowFilters((v) => !v)}
+        >
+          Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<Icon name="download" size={14} />}
+          onClick={exportCSV}
+          disabled={filtered.length === 0}
+        >
+          Exportar
+        </Button>
       </div>
+
+      {/* Panel de filtros */}
+      {showFilters && (
+        <Card padding={16} style={{ marginBottom: 16 }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 12,
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 600, color: "var(--text-muted)",
+              textTransform: "uppercase", letterSpacing: "0.06em",
+            }}>
+              Filtros
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  Limpiar todo
+                </Button>
+              )}
+              <Button variant="ghost" size="iconSm" onClick={() => setShowFilters(false)} title="Cerrar">
+                <Icon name="close" size={13} />
+              </Button>
+            </div>
+          </div>
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12,
+          }}>
+            {/* Ciudad */}
+            <FilterField label="Ciudad">
+              <select
+                value={fCity}
+                onChange={(e) => setFCity(e.target.value)}
+                style={filterSelect}
+              >
+                <option value="">Cualquiera</option>
+                {cities.map((city) => (
+                  <option key={city} value={city}>{city}</option>
+                ))}
+              </select>
+            </FilterField>
+
+            {/* Tags */}
+            <FilterField label="Tags">
+              <Input
+                value={fTags}
+                onChange={(e) => setFTags(e.target.value)}
+                placeholder="b2b, estratégico…"
+              />
+            </FilterField>
+
+            {/* Facturado rango */}
+            <FilterField label="Facturado (€)">
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Input
+                  type="number"
+                  value={fFactMin}
+                  onChange={(e) => setFFactMin(e.target.value)}
+                  placeholder="mín"
+                  style={{ minWidth: 0 }}
+                />
+                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                <Input
+                  type="number"
+                  value={fFactMax}
+                  onChange={(e) => setFFactMax(e.target.value)}
+                  placeholder="máx"
+                  style={{ minWidth: 0 }}
+                />
+              </div>
+            </FilterField>
+
+            {/* Última interacción */}
+            <FilterField label="Última interacción">
+              <select
+                value={fLastInter}
+                onChange={(e) => setFLastInter(e.target.value)}
+                style={filterSelect}
+              >
+                <option value="any">Cualquiera</option>
+                <option value="7d">Últimos 7 días</option>
+                <option value="30d">Últimos 30 días</option>
+                <option value="90d">Últimos 3 meses</option>
+                <option value="365d">Último año</option>
+                <option value="older">Más de 1 año / sin interacción</option>
+              </select>
+            </FilterField>
+
+            {/* Estado multi */}
+            <FilterField label="Estado">
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {["activo", "inactivo", "lead"].map((s) => {
+                  const active = fStatus.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => toggleStatus(s)}
+                      style={{
+                        padding: "5px 10px", borderRadius: 6,
+                        fontSize: 12, fontWeight: 500, textTransform: "capitalize",
+                        border: "1px solid var(--border)",
+                        background: active ? "var(--black)" : "var(--surface)",
+                        color: active ? "#fff" : "var(--text)",
+                      }}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
+            </FilterField>
+          </div>
+        </Card>
+      )}
 
       {error && (
         <Card style={{ marginBottom: 16, borderColor: "var(--error)", background: "#F5E1E1" }}>
@@ -793,6 +1020,25 @@ const FormField = ({ label, children }: { label: string; children: React.ReactNo
     {children}
   </label>
 );
+
+// Helpers del panel de filtros
+const FilterField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <label style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
+    <span style={{
+      fontSize: 10.5, fontWeight: 500, color: "var(--text-muted)",
+      textTransform: "uppercase", letterSpacing: "0.05em",
+    }}>
+      {label}
+    </span>
+    {children}
+  </label>
+);
+
+const filterSelect: React.CSSProperties = {
+  width: "100%", height: 34, padding: "0 10px",
+  border: "1px solid var(--border)", borderRadius: 7,
+  background: "var(--surface)", outline: "none", fontSize: 13, fontFamily: "inherit",
+};
 
 // ============================================================
 // SKELETON ROWS (loading state)

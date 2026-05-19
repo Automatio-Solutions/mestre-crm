@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Button, Card, Badge, EmptyState, Avatar, Dropdown, DropdownItem, DropdownSeparator, useConfirm } from "@/components/ui";
 import { Th, Td, Field } from "@/components/screens/contactos";
@@ -8,28 +8,39 @@ import { useContacts } from "@/lib/db/useContacts";
 import { InvoiceDocument } from "./InvoiceDocument";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { generateInvoicePdf } from "@/lib/pdf/generateInvoicePdf";
+import { COMPANY } from "@/lib/company";
+import { useJournalEntries } from "@/lib/db/useJournalEntries";
+import { buildInvoicePosting } from "@/lib/accounting/postings";
 import * as D from "@/lib/data";
 
 const statusTone: Record<string, any> = {
   pagada: "success", pendiente: "warning", vencida: "error", borrador: "outline", enviada: "purple",
 };
 
-type AsideTab = "general" | "mensajes" | "historial";
+type AsideTab = "general" | "notas" | "historial";
 
 export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
   const router = useRouter();
   const confirm = useConfirm();
-  const { invoices, loading, update, remove } = useInvoices();
+  const { invoices, loading, update, remove, duplicate, create } = useInvoices();
   const { contacts } = useContacts();
+  const { entries: journalEntries, create: createJournalEntry, remove: removeJournalEntry } = useJournalEntries();
 
   const inv = invoices.find((x) => x.id === invoiceId);
   const cli = inv ? contacts.find((c) => c.id === inv.clientId) : null;
 
   const [asideTab, setAsideTab] = useState<AsideTab>("general");
-  const [newMessage, setNewMessage] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [posting, setPosting] = useState(false);
   const hiddenDocRef = useRef<HTMLDivElement>(null);
+
+  // ---- Notas internas (editor) ----
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  useEffect(() => {
+    setNoteDraft(inv?.internalNote || "");
+  }, [inv?.id, inv?.internalNote]);
 
   const handleDownloadPdf = async () => {
     if (!hiddenDocRef.current || !inv) return;
@@ -90,13 +101,113 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
 
   const handleDelete = async () => {
     const ok = await confirm({
-      title: "Eliminar factura",
-      message: `¿Seguro que quieres eliminar la factura ${inv.number}? Esta acción no se puede deshacer.`,
+      title: "Anular factura",
+      message: `¿Seguro que quieres anular la factura ${inv.number}? Esta acción no se puede deshacer.`,
       danger: true,
     });
     if (!ok) return;
     await remove(inv.id);
     router.push("/ventas/facturas");
+  };
+
+  const handleDuplicate = async () => {
+    if (!inv) return;
+    try {
+      const dup = await duplicate(inv.id);
+      router.push(`/ventas/facturas/${dup.id}/editar`);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "Error duplicando la factura");
+    }
+  };
+
+  // Crea una factura rectificativa: misma estructura pero con importes
+  // negativos (reverso completo). El número lleva prefijo "R-".
+  // El usuario aterriza en el editor para ajustarla si quiere una
+  // rectificativa parcial.
+  const handleCreateRectificative = async () => {
+    if (!inv) return;
+    const ok = await confirm({
+      title: "Crear factura rectificativa",
+      message: `Se generará una factura rectificativa con importes negativos (reverso completo) de ${inv.number}. La factura original no se modifica. Podrás editarla antes de aprobar.`,
+    });
+    if (!ok) return;
+    try {
+      const year = new Date().getFullYear();
+      const rand = Math.floor(Math.random() * 999).toString().padStart(3, "0");
+      const rectNumber = `R-${year}/${rand}`;
+      const negLines = (inv.lines || []).map((l) => ({
+        ...l,
+        id: `l-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}-${l.id}`,
+        quantity: -Math.abs(l.quantity || 0),
+      }));
+      const created = await create({
+        number: rectNumber,
+        clientId: inv.clientId,
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 30 * 86400000),
+        base: -Math.abs(inv.base),
+        vatPct: inv.vatPct,
+        total: -Math.abs(inv.total),
+        status: "borrador",
+        concept: `Rectificativa de ${inv.number}${inv.concept ? ` · ${inv.concept}` : ""}`,
+        lines: negLines,
+        paymentMethod: inv.paymentMethod,
+        paymentNotes: inv.paymentNotes,
+        account: inv.account,
+        accountByConcept: inv.accountByConcept,
+        internalNote: `Rectificativa de la factura ${inv.number}.`,
+        tags: ["rectificativa", ...(inv.tags || [])],
+        showCustomFields: inv.showCustomFields,
+        docText: inv.docText,
+        docFooterMessage: inv.docFooterMessage,
+      });
+      router.push(`/ventas/facturas/${created.id}/editar`);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "Error creando la rectificativa");
+    }
+  };
+
+  // ----- Asiento contable enlazado -----
+  const existingPosting = inv
+    ? journalEntries.find((e) => e.sourceType === "invoice" && e.sourceId === inv.id)
+    : null;
+
+  const handlePost = async () => {
+    if (!inv || existingPosting) return;
+    setPosting(true);
+    try {
+      await createJournalEntry(buildInvoicePosting(inv, cli?.name));
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "Error generando el asiento. Revisa que las cuentas 430, 705 y 477 existan en el Cuadro de cuentas.");
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const handleUnpost = async () => {
+    if (!existingPosting) return;
+    const ok = await confirm({
+      title: "Eliminar asiento",
+      message: `Se borrará el asiento ${existingPosting.number} del Libro Diario. La factura no se modifica.`,
+      danger: true,
+    });
+    if (!ok) return;
+    await removeJournalEntry(existingPosting.id);
+  };
+
+  const handleSaveNote = async () => {
+    if (!inv) return;
+    setNoteSaving(true);
+    try {
+      await update(inv.id, { internalNote: noteDraft.trim() || null });
+    } catch (e: any) {
+      alert(e?.message || "Error guardando la nota");
+    } finally {
+      setNoteSaving(false);
+    }
   };
 
   return (
@@ -143,8 +254,12 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
             >
               {downloadingPdf ? "Generando…" : "Descargar PDF"}
             </DropdownItem>
-            <DropdownItem leftIcon={<Icon name="fileText" size={13} />}>Duplicar</DropdownItem>
-            <DropdownItem leftIcon={<Icon name="refresh" size={13} />}>Crear rectificativa</DropdownItem>
+            <DropdownItem leftIcon={<Icon name="fileText" size={13} />} onClick={handleDuplicate}>
+              Duplicar
+            </DropdownItem>
+            <DropdownItem leftIcon={<Icon name="refresh" size={13} />} onClick={handleCreateRectificative}>
+              Crear rectificativa
+            </DropdownItem>
             <DropdownSeparator />
             <DropdownItem danger leftIcon={<Icon name="trash" size={13} />} onClick={handleDelete}>
               Anular factura
@@ -207,7 +322,7 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
           <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 16 }}>
             {([
               { id: "general", label: "General" },
-              { id: "mensajes", label: "Mensajes" },
+              { id: "notas", label: "Notas" },
               { id: "historial", label: "Historial" },
             ] as const).map((t) => {
               const active = asideTab === t.id;
@@ -352,14 +467,51 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
 
               {/* Categorización */}
               <Card padding={18}>
-                <SectionHeader title="Categorización" action={<button style={linkBtn}>Editar</button>} />
+                <SectionHeader
+                  title="Categorización"
+                  action={
+                    <button
+                      style={linkBtn}
+                      onClick={() => router.push(`/ventas/facturas/${inv.id}/editar`)}
+                    >
+                      Editar
+                    </button>
+                  }
+                />
+                <SummaryRow
+                  label="Método de pago"
+                  value={
+                    <span style={{ textTransform: "capitalize" }}>
+                      {inv.paymentMethod || "—"}
+                    </span>
+                  }
+                />
                 <SummaryRow
                   label="Cuenta contable"
                   value={
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
-                      Prestaciones de servicios
-                    </span>
+                    inv.account ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
+                        {inv.account}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text-faint)" }}>Sin asignar</span>
+                    )
+                  }
+                />
+                <SummaryRow
+                  label="Etiquetas"
+                  value={
+                    inv.tags && inv.tags.length > 0 ? (
+                      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {inv.tags.map((t: string) => (
+                          <span key={t} style={{
+                            fontSize: 11, padding: "2px 8px", borderRadius: 999,
+                            background: "var(--beige-bg)", color: "var(--text)",
+                          }}>{t}</span>
+                        ))}
+                      </span>
+                    ) : <span style={{ color: "var(--text-faint)" }}>—</span>
                   }
                   last
                 />
@@ -376,56 +528,99 @@ export function InvoiceDetailScreen({ invoiceId }: { invoiceId: string }) {
                 <SectionHeader
                   title="Asiento contable"
                   action={
-                    <button style={linkBtn} onClick={() => router.push("/contabilidad/libro-diario")}>
-                      Ver
-                    </button>
+                    existingPosting ? (
+                      <button
+                        style={linkBtn}
+                        onClick={() => router.push("/contabilidad/libro-diario")}
+                      >
+                        Ver libro
+                      </button>
+                    ) : null
                   }
                 />
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  Asiento automático generado al emitir la factura.
-                </div>
+                {existingPosting ? (
+                  <>
+                    <SummaryRow
+                      label="Nº asiento"
+                      value={
+                        <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 500 }}>
+                          {existingPosting.number}
+                        </span>
+                      }
+                    />
+                    <SummaryRow
+                      label="Fecha"
+                      value={D.fmtShort(existingPosting.date)}
+                    />
+                    <SummaryRow
+                      label="Líneas"
+                      value={`${existingPosting.lines.length}`}
+                      last
+                    />
+                    <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        leftIcon={<Icon name="trash" size={12} />}
+                        onClick={handleUnpost}
+                      >
+                        Eliminar asiento
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+                      Aún no se ha registrado en el Libro Diario.
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<Icon name="plus" size={12} />}
+                      onClick={handlePost}
+                      disabled={posting}
+                    >
+                      {posting ? "Generando…" : "Generar asiento"}
+                    </Button>
+                  </>
+                )}
               </Card>
             </div>
           )}
 
-          {asideTab === "mensajes" && (
+          {asideTab === "notas" && (
             <Card padding={18}>
-              <SectionHeader title="Mensajes con el cliente" />
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
-                {(activity.filter((a: any) => a.userId === null) as any[]).map((a: any) => (
-                  <div key={a.id} style={{ display: "flex", gap: 8 }}>
-                    <div style={{
-                      width: 26, height: 26, borderRadius: "50%", background: "var(--beige)",
-                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600,
-                    }}>
-                      {cli?.name.slice(0, 2).toUpperCase() || "?"}
-                    </div>
-                    <div style={{ flex: 1, background: "var(--beige-bg)", padding: "8px 10px", borderRadius: 8, fontSize: 12.5 }}>
-                      <div>{a.action}</div>
-                      <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 3 }}>{D.relativeTime(a.when)}</div>
-                    </div>
-                  </div>
-                ))}
-                {activity.filter((a: any) => a.userId === null).length === 0 && (
-                  <div style={{ fontSize: 12, color: "var(--text-faint)", textAlign: "center", padding: 20 }}>
-                    Aún no hay mensajes del cliente sobre esta factura.
-                  </div>
-                )}
+              <SectionHeader title="Notas internas" />
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 10 }}>
+                Notas privadas sobre esta factura. No se muestran al cliente ni se imprimen en el PDF.
               </div>
               <textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Escribe una nota interna o mensaje para el cliente…"
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="Escribe una nota interna sobre esta factura…"
                 style={{
-                  width: "100%", minHeight: 70, padding: "8px 10px", fontSize: 13,
+                  width: "100%", minHeight: 160, padding: "10px 12px", fontSize: 13,
                   border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)",
-                  fontFamily: "inherit", resize: "vertical",
+                  fontFamily: "inherit", resize: "vertical", lineHeight: 1.45,
                 }}
               />
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
-                <Button variant="ghost" size="sm">Nota interna</Button>
-                <Button variant="primary" size="sm" disabled={!newMessage.trim()} leftIcon={<Icon name="mail" size={12} />}>
-                  Enviar al cliente
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                marginTop: 8, gap: 8,
+              }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                  {noteDraft === (inv.internalNote || "")
+                    ? (inv.internalNote ? "Guardado" : "Sin nota")
+                    : "Cambios sin guardar"}
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Icon name="check" size={12} />}
+                  disabled={noteSaving || noteDraft === (inv.internalNote || "")}
+                  onClick={handleSaveNote}
+                >
+                  {noteSaving ? "Guardando…" : "Guardar nota"}
                 </Button>
               </div>
             </Card>
@@ -490,11 +685,26 @@ function InvoicePreview({ inv, cli, lines }: { inv: any; cli: any; lines: any[] 
     <div style={{ background: "#fff", width: "100%", maxWidth: 560, padding: 40, boxShadow: "0 10px 36px rgba(0,0,0,0.1)", fontSize: 11, color: "#222", lineHeight: 1.6 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
         <div>
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: "#2A1C14", color: "#F6F1E8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, marginBottom: 10 }}>
-            dm
+          {COMPANY.logoUrl ? (
+            <img
+              src={COMPANY.logoUrl}
+              alt={COMPANY.tradeName}
+              style={{ height: 32, marginBottom: 10, display: "block" }}
+            />
+          ) : (
+            <div style={{
+              width: 36, height: 36, borderRadius: 8,
+              background: "#2A1C14", color: "#F6F1E8",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontWeight: 600, marginBottom: 10, fontSize: 14,
+            }}>
+              {COMPANY.tradeName.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#111" }}>{COMPANY.legalName}</div>
+          <div style={{ fontSize: 10, color: "#666" }}>
+            {COMPANY.nif} · {COMPANY.city}
           </div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#111" }}>Dani Mestre Studio</div>
-          <div style={{ fontSize: 10, color: "#666" }}>B85412378 · Barcelona</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 22, fontWeight: 500, color: "#111", letterSpacing: "-0.02em" }}>Factura</div>
@@ -561,7 +771,7 @@ function InvoicePreview({ inv, cli, lines }: { inv: any; cli: any; lines: any[] 
       </div>
 
       <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #e5e5e5", fontSize: 9.5, color: "#888", display: "flex", justifyContent: "space-between" }}>
-        <div>Transferencia a ES21 2100 0418 4502 0005 1332</div>
+        <div>Transferencia a {COMPANY.iban}</div>
         {inv.dueDate && <div>Vence el {D.fmtDate(inv.dueDate)}</div>}
       </div>
     </div>

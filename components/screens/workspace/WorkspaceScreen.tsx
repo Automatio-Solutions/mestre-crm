@@ -13,6 +13,7 @@ import { useTasks } from "@/lib/db/useTasks";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { Clientes } from "@/components/screens/clientes";
 import { TaskModal } from "@/components/screens/task-modal";
+import { NewTaskModal } from "@/components/screens/new-task-modal";
 
 type View = "clientes" | "proyectos" | "tareas" | "mis-tareas";
 
@@ -246,10 +247,12 @@ function TasksView({ mineOnly }: { mineOnly: boolean }) {
   const { user } = useAuth();
   const router = useRouter();
   const { spaces, loading: loadingSpaces } = useClientSpaces();
-  const { tasks: allTasks, loading: loadingTasks, update: updateTaskDB } = useTasks();
+  const { tasks: allTasks, loading: loadingTasks, update: updateTaskDB, create: createTaskDB } = useTasks();
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [layout, setLayout] = useState<"kanban" | "lista" | "calendario">("kanban");
   const [groupBy, setGroupBy] = useState<"none" | "proyecto" | "cliente">("none");
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const currentUserRef = user?.userRef || null;
 
   // Map cliente/proyecto para resolver IDs rápido
   const clientMap = useMemo(() => {
@@ -347,6 +350,70 @@ function TasksView({ mineOnly }: { mineOnly: boolean }) {
     }
   };
 
+  // Lista plana de proyectos cross-cliente para el modal Nueva tarea.
+  // Incluye el nombre del cliente en el label para distinguirlos.
+  const allProjects = useMemo(() => {
+    return spaces.flatMap((s: any) =>
+      (s.modules || []).map((m: any) => ({
+        id: m.id,
+        name: `${m.name}  ·  ${s.name}`,
+        icon: m.icon,
+        __clientId: s.id,
+      }))
+    );
+  }, [spaces]);
+
+  const handleCreateTask = async (values: any) => {
+    const project = allProjects.find((p: any) => p.id === values.moduleId);
+    if (!project) {
+      alert("Selecciona un proyecto para la tarea.");
+      return;
+    }
+    const clientId = project.__clientId;
+    const tags = values.category ? [values.category] : [];
+
+    // En "Mis tareas", si no se elige a nadie, asignar al usuario actual
+    let assignees = values.assignees || [];
+    if (mineOnly && currentUserRef && assignees.length === 0) {
+      assignees = [currentUserRef];
+    }
+
+    const created = await createTaskDB({
+      clientId,
+      moduleId: values.moduleId,
+      title: values.title,
+      description: values.description,
+      status: "todo",
+      priority: values.priority || "media",
+      assignees,
+      tags,
+      dueDate: values.dueDate || null,
+    });
+
+    // Log de actividad inicial (creación + asignaciones)
+    const now = new Date();
+    const newId = (p: string) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    const activityUser = currentUserRef || "u1";
+    const activity: any[] = [{ id: newId("a"), userId: activityUser, action: "creó la tarea", when: now }];
+    assignees.forEach((uid: string, i: number) => {
+      const name = (D as any).userById?.(uid)?.name || uid;
+      activity.push({
+        id: newId("a"),
+        userId: activityUser,
+        action: `asignó a ${name}`,
+        when: new Date(now.getTime() + i + 1),
+      });
+    });
+
+    if (created) {
+      await updateTaskDB(created.id, {
+        subtasks: values.subtasks || [],
+        attachments: values.attachments || [],
+        activity,
+      });
+    }
+  };
+
   const openTask = openTaskId ? allTasks.find((t: any) => t.id === openTaskId) : null;
   const openTaskClient = openTask ? clientMap.get(openTask.clientId) : null;
 
@@ -365,6 +432,16 @@ function TasksView({ mineOnly }: { mineOnly: boolean }) {
               <GroupByToggle value={groupBy} onChange={setGroupBy}/>
             )}
             <LayoutSwitch value={layout} onChange={setLayout}/>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Icon name="plus" size={13}/>}
+              onClick={() => setNewTaskOpen(true)}
+              disabled={allProjects.length === 0}
+              title={allProjects.length === 0 ? "Crea un proyecto primero" : ""}
+            >
+              Nueva tarea
+            </Button>
           </div>
         }
       />
@@ -424,6 +501,13 @@ function TasksView({ mineOnly }: { mineOnly: boolean }) {
           client={openTaskClient}
         />
       )}
+
+      <NewTaskModal
+        open={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
+        projects={allProjects}
+        onSubmit={handleCreateTask}
+      />
     </div>
   );
 }

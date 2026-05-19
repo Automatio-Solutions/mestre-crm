@@ -1,9 +1,5 @@
-"use client";
-import { useRouter } from "next/navigation";
-import { Contabilidad } from "@/components/screens/contabilidad-impuestos-analitica";
+import { LibroDiarioScreen } from "@/components/screens/contabilidad/LibroDiarioScreen";
 
 export default function Page() {
-  const router = useRouter();
-  const setRoute = (r: string) => router.push(r);
-  return <Contabilidad setRoute={setRoute} />;
+  return <LibroDiarioScreen />;
 }

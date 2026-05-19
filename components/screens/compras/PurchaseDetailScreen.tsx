@@ -1,9 +1,12 @@
 "use client";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Button, Card, Badge, EmptyState, Dropdown, DropdownItem, DropdownSeparator, TagPill, useConfirm } from "@/components/ui";
 import { Th, Td, Field } from "@/components/screens/contactos";
 import { useContacts } from "@/lib/db/useContacts";
 import { usePurchases } from "@/lib/db/usePurchases";
+import { useJournalEntries } from "@/lib/db/useJournalEntries";
+import { buildPurchasePosting } from "@/lib/accounting/postings";
 import { calcLineSubtotal } from "@/lib/db/invoices";
 import * as D from "@/lib/data";
 
@@ -24,9 +27,38 @@ export function PurchaseDetailScreen({ purchaseId }: { purchaseId: string }) {
   const confirm = useConfirm();
   const { purchases, loading, update, remove, duplicate } = usePurchases();
   const { contacts } = useContacts();
+  const { entries: journalEntries, create: createJournalEntry, remove: removeJournalEntry } = useJournalEntries();
+  const [posting, setPosting] = useState(false);
 
   const p = purchases.find((x) => x.id === purchaseId);
   const sup = p ? contacts.find((c) => c.id === p.supplierId) : null;
+  const existingPosting = p
+    ? journalEntries.find((e) => e.sourceType === "purchase" && e.sourceId === p.id)
+    : null;
+
+  const handlePost = async () => {
+    if (!p || existingPosting) return;
+    setPosting(true);
+    try {
+      await createJournalEntry(buildPurchasePosting(p, sup?.name));
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "Error generando el asiento. Revisa que las cuentas usadas existan en el Cuadro de cuentas.");
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const handleUnpost = async () => {
+    if (!existingPosting) return;
+    const ok = await confirm({
+      title: "Eliminar asiento",
+      message: `Se borrará el asiento ${existingPosting.number} del Libro Diario. El gasto no se modifica.`,
+      danger: true,
+    });
+    if (!ok) return;
+    await removeJournalEntry(existingPosting.id);
+  };
 
   if (loading) {
     return <div style={{ padding: 60, textAlign: "center", color: "var(--text-muted)" }}>Cargando gasto…</div>;
@@ -223,6 +255,64 @@ export function PurchaseDetailScreen({ purchaseId }: { purchaseId: string }) {
                 />
               )}
             </div>
+          </Card>
+
+          {/* Asiento contable */}
+          <Card padding={18}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={sectionHeader}>Asiento contable</div>
+              {existingPosting && (
+                <button
+                  onClick={() => router.push("/contabilidad/libro-diario")}
+                  style={{ fontSize: 12, fontWeight: 500, color: "var(--purple)", background: "transparent" }}
+                >
+                  Ver libro
+                </button>
+              )}
+            </div>
+            {existingPosting ? (
+              <>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                    <span style={{ color: "var(--text-muted)" }}>Nº asiento</span>
+                    <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 500 }}>{existingPosting.number}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                    <span style={{ color: "var(--text-muted)" }}>Fecha</span>
+                    <span>{D.fmtShort(existingPosting.date)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                    <span style={{ color: "var(--text-muted)" }}>Líneas</span>
+                    <span>{existingPosting.lines.length}</span>
+                  </div>
+                </div>
+                <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<Icon name="trash" size={12} />}
+                    onClick={handleUnpost}
+                  >
+                    Eliminar asiento
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+                  Aún no se ha registrado en el Libro Diario.
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Icon name="plus" size={12} />}
+                  onClick={handlePost}
+                  disabled={posting}
+                >
+                  {posting ? "Generando…" : "Generar asiento"}
+                </Button>
+              </>
+            )}
           </Card>
 
           {p.internalNote && (

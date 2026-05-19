@@ -153,21 +153,7 @@ export function CardHeader({
           {subtitle && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{subtitle}</div>}
         </div>
       </div>
-      {action || (
-        <button
-          style={{ color: "var(--text-faint)", padding: 4, borderRadius: 6, display: "flex" }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--beige-light)";
-            e.currentTarget.style.color = "var(--text)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "var(--text-faint)";
-          }}
-        >
-          <Icon name="more" size={16} />
-        </button>
-      )}
+      {action}
     </div>
   );
 }

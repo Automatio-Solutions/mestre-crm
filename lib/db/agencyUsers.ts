@@ -7,12 +7,24 @@
  */
 import { supabase } from "@/lib/supabase/client";
 
+export type Scope =
+  | "*"            // admin: acceso total
+  | "dashboard"
+  | "contactos"
+  | "ventas"
+  | "compras"
+  | "contabilidad"
+  | "impuestos"
+  | "analitica"
+  | "proyectos";
+
 export interface AgencyUser {
   id: string;
   email: string;
   name: string;
   password: string;
   userRef: string | null;
+  scopes: Scope[];
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -25,6 +37,7 @@ const fromRow = (r: any): AgencyUser => ({
   name: r.name,
   password: r.password,
   userRef: r.user_ref,
+  scopes: Array.isArray(r.scopes) && r.scopes.length > 0 ? r.scopes : ["*"],
   isActive: !!r.is_active,
   createdAt: r.created_at ? new Date(r.created_at) : new Date(),
   updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),

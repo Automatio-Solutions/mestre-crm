@@ -8,12 +8,15 @@ import {
   Dropdown, DropdownItem, DropdownSeparator,
   PriorityFlag, useConfirm,
 } from "@/components/ui";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 // ============================================================
 // TASK SIDE PANEL — vista de detalle como panel lateral
 // ============================================================
 export const TaskModal = ({ task, onClose, updateTask, client }) => {
   const confirm = useConfirm();
+  const { user } = useAuth();
+  const currentUserRef = user?.userRef || "u1";  // fallback al primer usuario si no hay sesión
   const newSubtaskInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -65,7 +68,7 @@ export const TaskModal = ({ task, onClose, updateTask, client }) => {
   // ---- log de actividad ----
   const appendActivity = (action) => ({
     id: newId("a"),
-    userId: "u1",
+    userId: currentUserRef,
     action,
     when: new Date(),
   });
@@ -190,7 +193,7 @@ export const TaskModal = ({ task, onClose, updateTask, client }) => {
   const comments = task.comments || [];
   const sendComment = () => {
     if (!newComment.trim()) return;
-    const next = [...comments, { id: newId("c"), userId: "u1", text: newComment.trim(), when: new Date() }];
+    const next = [...comments, { id: newId("c"), userId: currentUserRef, text: newComment.trim(), when: new Date() }];
     updateTask({ comments: next });
     setNewComment("");
   };

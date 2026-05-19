@@ -11,6 +11,7 @@ import {
 } from "@/components/ui";
 import { useClientSpaces } from "@/lib/db/useClientSpaces";
 import { useTasks } from "@/lib/db/useTasks";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { ClientSpaceFormModal } from "./client-space-form";
 import { TaskModal } from "./task-modal";
 import { NewTaskModal } from "./new-task-modal";
@@ -64,7 +65,38 @@ export const Clientes = ({ setRoute }) => {
                   <div style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</div>
                   <div style={{ fontSize: 11.5, color:'var(--text-muted)' }}>{c.sector}</div>
                 </div>
-                <button style={{ color:'var(--text-faint)', padding: 4 }}><Icon name="more" size={14}/></button>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Dropdown
+                    align="end"
+                    trigger={
+                      <button
+                        style={{ color:'var(--text-faint)', padding: 4 }}
+                        title="Acciones"
+                      >
+                        <Icon name="moreV" size={14}/>
+                      </button>
+                    }
+                  >
+                    <DropdownItem leftIcon={<Icon name="folder" size={13}/>} onClick={() => setRoute(`/clientes/${c.id}`)}>
+                      Abrir cliente
+                    </DropdownItem>
+                    <DropdownItem leftIcon={<Icon name="edit" size={13}/>} onClick={() => { setEditing(c); setFormOpen(true); }}>
+                      Editar datos
+                    </DropdownItem>
+                    <DropdownSeparator/>
+                    <DropdownItem
+                      danger
+                      leftIcon={<Icon name="trash" size={13}/>}
+                      onClick={async () => {
+                        if (window.confirm(`¿Eliminar el cliente "${c.name}"? Esto no borra las tareas asociadas.`)) {
+                          await removeSpace(c.id);
+                        }
+                      }}
+                    >
+                      Eliminar
+                    </DropdownItem>
+                  </Dropdown>
+                </div>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12, marginBottom: 14, fontSize: 12 }}>
                 <div><div style={{ color:'var(--text-muted)', marginBottom: 2 }}>Módulos</div><div style={{ fontSize: 16, fontWeight: 500 }}>{c.modules.length}</div></div>
@@ -96,6 +128,8 @@ export const Clientes = ({ setRoute }) => {
 export const ClienteOverview = ({ clientId, setRoute }) => {
   const { spaces, loading, createModule } = useClientSpaces();
   const { tasks: allTasks, update: updateTaskDB, create: createTaskDB } = useTasks();
+  const { user } = useAuth();
+  const currentUserRef = user?.userRef || "u1";
   const [openTaskId, setOpenTaskId] = useState(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -137,12 +171,12 @@ export const ClienteOverview = ({ clientId, setRoute }) => {
     // Log de actividad inicial (creación + asignaciones)
     const now = new Date();
     const newId = (p) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-    const activity = [{ id: newId("a"), userId: "u1", action: "creó la tarea", when: now }];
+    const activity = [{ id: newId("a"), userId: currentUserRef, action: "creó la tarea", when: now }];
     (values.assignees || []).forEach((uid, i) => {
       const name = D.userById(uid)?.name || uid;
       activity.push({
         id: newId("a"),
-        userId: "u1",
+        userId: currentUserRef,
         action: `asignó a ${name}`,
         when: new Date(now.getTime() + i + 1),
       });

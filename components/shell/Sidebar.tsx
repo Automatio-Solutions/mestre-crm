@@ -1,10 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Icon, Avatar, Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui";
+import { Icon } from "@/components/ui";
 import { LogoIcon } from "./Logo";
 import { NAV, isNavItem, NavChild, NavItemDef } from "./nav";
-import * as DMData from "@/lib/data";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 export function Sidebar({
@@ -25,9 +24,6 @@ export function Sidebar({
   }, [activeParent]);
 
   const setRoute = (p: string) => router.push(p);
-  const { user, logout } = useAuth();
-  // Usuario para el avatar (vincula con el array USERS de mocks si existe userRef)
-  const teamUser = (user?.userRef ? DMData.userById(user.userRef) : null) || DMData.USERS[0];
 
   function NavItem({ item }: { item: NavItemDef }) {
     const hasChildren = !!item.children?.length;
@@ -87,9 +83,14 @@ export function Sidebar({
     );
   }
 
-  const items = NAV.filter((n): n is NavItemDef => isNavItem(n));
+  const { hasScope } = useAuth();
+  const items = NAV
+    .filter((n): n is NavItemDef => isNavItem(n))
+    .filter((i) => hasScope(i.scope));
   const gestion = items.filter((i) => !i.section);
   const proyectos = items.filter((i) => i.section === "proyectos");
+  const showGestionSeparator = gestion.length > 0;
+  const showProyectosSeparator = proyectos.length > 0;
 
   return (
     <aside
@@ -136,7 +137,7 @@ export function Sidebar({
 
       {/* Nav */}
       <nav style={{ flex: 1, overflow: "auto", padding: collapsed ? "4px 8px" : "4px 10px" }}>
-        {!collapsed && (
+        {!collapsed && showGestionSeparator && (
           <div
             style={{
               fontSize: 10.5, fontWeight: 500, color: "var(--text-muted)",
@@ -149,7 +150,7 @@ export function Sidebar({
         {gestion.map((item) => (
           <NavItem key={item.id} item={item} />
         ))}
-        {!collapsed && (
+        {!collapsed && showProyectosSeparator && (
           <div
             style={{
               fontSize: 10.5, fontWeight: 500, color: "var(--text-muted)",
@@ -164,59 +165,22 @@ export function Sidebar({
         ))}
       </nav>
 
-      {/* User menu (logout / ajustes) */}
-      <div style={{ borderTop: "1px solid var(--border-strong)", padding: collapsed ? 8 : 10 }}>
-        <Dropdown
-          align="start"
-          direction="up"
-          trigger={
-            <button
-              style={{
-                display: "flex", alignItems: "center", gap: 10, width: "100%",
-                padding: collapsed ? 6 : "6px 10px", borderRadius: 8,
-                justifyContent: collapsed ? "center" : "flex-start", cursor: "pointer",
-                background: "transparent", border: "none",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <Avatar user={teamUser} size={26} />
-              {!collapsed && (
-                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{user?.name || teamUser?.name || "—"}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{user?.email || ""}</div>
-                </div>
-              )}
-              {!collapsed && <Icon name="chevronUp" size={14} style={{ color: "var(--text-muted)" }} />}
-            </button>
-          }
-        >
-          <DropdownItem leftIcon={<Icon name="settings" size={13} />}>
-            Ajustes
-          </DropdownItem>
-          <DropdownSeparator />
-          <DropdownItem
-            danger
-            leftIcon={<Icon name="x" size={13} />}
-            onClick={logout}
-          >
-            Cerrar sesión
-          </DropdownItem>
-        </Dropdown>
-        {collapsed && (
+      {/* Footer: si está colapsado, botón para expandir el sidebar */}
+      {collapsed && (
+        <div style={{ borderTop: "1px solid var(--border-strong)", padding: 8 }}>
           <button
             onClick={() => setCollapsed(false)}
             style={{
               display: "flex", justifyContent: "center", width: "100%",
-              padding: 8, marginTop: 6, color: "var(--text-muted)", borderRadius: 8,
+              padding: 8, color: "var(--text-muted)", borderRadius: 8,
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
             <Icon name="sidebar" size={16} />
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   );
 }

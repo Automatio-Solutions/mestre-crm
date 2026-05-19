@@ -299,6 +299,105 @@ async function main() {
   }));
   await upsert("payment_batches", batches);
 
+  // 9b) PROFORMAS — convertimos del mock al esquema real
+  const proformas = (D.PROFORMAS || []).map((p: any) => {
+    const vatPct = 21;
+    return {
+      id: p.id,
+      number: p.number,
+      client_id: p.clientId ?? null,
+      concept: p.concept ?? null,
+      amount: p.amount,
+      vat_pct: vatPct,
+      status: p.status,
+      issue_date: toISODate(p.issueDate),
+      valid_until: toISODate(p.validUntil),
+      linked_quote_id: p.linkedQuoteId ?? null,
+      linked_invoice_id: p.linkedInvoiceId ?? null,
+      internal_note: null,
+      lines: [],
+      terms: null,
+      tags: [],
+    };
+  });
+  await upsert("proformas", proformas);
+
+  // 9c) EMPLOYEES — empleados para Nóminas
+  const employees = ((D as any).EMPLOYEES || []).map((e: any) => ({
+    id: e.id,
+    name: e.name,
+    role: e.role ?? null,
+    contract_type: e.contractType ?? "Indefinido",
+    active: e.active !== false,
+    gross_month: e.grossMonth ?? 0,
+    net_month: e.netMonth ?? 0,
+    irpf: e.irpf ?? 0,
+    ss_employer: e.ssEmployer ?? 0,
+    ss_employee: e.ssEmployee ?? 0,
+    email: e.email ?? null,
+    dni: e.dni ?? null,
+    hire_date: toISODate(e.hireDate),
+    end_date: toISODate(e.endDate),
+    notes: e.notes ?? null,
+  }));
+  await upsert("employees", employees);
+
+  // 9d) CHART OF ACCOUNTS — Plan General Contable
+  const pgcAccounts = ((D as any).PGC_ACCOUNTS || []).map((a: any) => ({
+    id: `coa-${a.code}`,
+    code: a.code,
+    name: a.name,
+    account_type: a.type,
+    group_code: a.group ?? null,
+    parent_code: null,
+    description: null,
+    active: true,
+  }));
+  await upsert("chart_of_accounts", pgcAccounts);
+
+  // 9e) JOURNAL ENTRIES + LINES — agrupando D.ACCOUNTING por nº de asiento
+  // Cada fila del mock es una línea; las que comparten `number` son del mismo asiento.
+  const accountingRows: any[] = (D as any).ACCOUNTING || [];
+  const grouped = new Map<string, any[]>();
+  accountingRows.forEach((r) => {
+    if (!grouped.has(r.number)) grouped.set(r.number, []);
+    grouped.get(r.number)!.push(r);
+  });
+
+  const entryRows: any[] = [];
+  const lineRows: any[] = [];
+  Array.from(grouped.entries()).forEach(([number, rows]) => {
+    const entryId = `je-${number.replace(/[^a-z0-9]/gi, "")}`;
+    const first = rows[0];
+    // Concepto general: usamos el primer concepto que tenga el asiento.
+    const description =
+      first.concept || rows.find((r) => r.concept)?.concept || null;
+    entryRows.push({
+      id: entryId,
+      number,
+      date: toISODate(first.date),
+      description,
+      doc_ref: first.docRef ?? null,
+      source_type: "manual",
+      source_id: null,
+    });
+    rows.forEach((r, idx) => {
+      // Reducir a código de 3 dígitos (los del PGC en este seed)
+      const code3 = String(r.account).slice(0, 3);
+      lineRows.push({
+        id: `jl-${entryId}-${idx + 1}`,
+        entry_id: entryId,
+        line_no: idx + 1,
+        account_code: code3,
+        concept: r.concept ?? null,
+        debit: Number(r.debit || 0),
+        credit: Number(r.credit || 0),
+      });
+    });
+  });
+  await upsert("journal_entries", entryRows);
+  await upsert("journal_entry_lines", lineRows);
+
   // 10) TAX MODELS (modelos fiscales)
   // La DB solo acepta pendiente/presentado/aplazado; el mock incluye
   // "en preparación" y otros, los normalizamos a pendiente.

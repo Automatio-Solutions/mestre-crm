@@ -15,6 +15,7 @@ import { NewTaskModal } from "./new-task-modal";
 import { NewProjectModal } from "./new-project-modal";
 import { useClientSpaces } from "@/lib/db/useClientSpaces";
 import { useTasks } from "@/lib/db/useTasks";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 // ============================================================
 // CLIENTE → MÓDULO (Lista | Kanban | Calendario | Gantt)
@@ -22,6 +23,8 @@ import { useTasks } from "@/lib/db/useTasks";
 export const ClienteModulo = ({ clientId, moduleId, setRoute, initialTaskId }) => {
   const { spaces, loading: spacesLoading, createModule } = useClientSpaces();
   const { tasks: moduleTasks, loading: tasksLoading, update: updateTaskDB, create: createTaskDB, remove: removeTaskDB } = useTasks({ clientId, moduleId });
+  const { user } = useAuth();
+  const currentUserRef = user?.userRef || "u1";
   const client = spaces.find(s => s.id === clientId);
   const mod = client?.modules.find(m => m.id === moduleId);
   const [view, setView] = useState('lista');
@@ -58,12 +61,12 @@ export const ClienteModulo = ({ clientId, moduleId, setRoute, initialTaskId }) =
     // Construir log de actividad inicial (creación + asignaciones)
     const now = new Date();
     const newId = (p) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-    const activity = [{ id: newId("a"), userId: "u1", action: "creó la tarea", when: now }];
+    const activity = [{ id: newId("a"), userId: currentUserRef, action: "creó la tarea", when: now }];
     (values.assignees || []).forEach((uid, i) => {
       const name = D.userById(uid)?.name || uid;
       activity.push({
         id: newId("a"),
-        userId: "u1",
+        userId: currentUserRef,
         action: `asignó a ${name}`,
         when: new Date(now.getTime() + i + 1),
       });

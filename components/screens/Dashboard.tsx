@@ -9,21 +9,54 @@ import { useInvoices } from "@/lib/db/useInvoices";
 import { useContacts } from "@/lib/db/useContacts";
 import { useTasks } from "@/lib/db/useTasks";
 import { useClientSpaces } from "@/lib/db/useClientSpaces";
+import { usePurchases } from "@/lib/db/usePurchases";
+import { useTaxModels } from "@/lib/db/useTaxModels";
+import { useAuth } from "@/lib/auth/AuthContext";
+import { ProjectsHome } from "./ProjectsHome";
 
+/**
+ * Router del Inicio:
+ *  - Si el usuario tiene scope global (*) o "dashboard" → vista admin completa.
+ *  - Si solo tiene "proyectos" → ProjectsHome (tareas + proyectos).
+ *  - Otros casos (p. ej. solo "ventas") caerán también en el admin por defecto:
+ *    los KPIs se calculan en vivo de lo que vea en Supabase.
+ */
 export function Dashboard() {
+  const { user, loading, hasScope } = useAuth();
+
+  // Mientras carga la sesión, dejamos placeholder
+  if (loading) {
+    return (
+      <div style={{ padding: 60, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+        Cargando…
+      </div>
+    );
+  }
+
+  // Usuario solo con "proyectos" → su home personalizado
+  if (user && !hasScope("dashboard") && hasScope("proyectos")) {
+    return <ProjectsHome />;
+  }
+
+  return <AdminDashboard />;
+}
+
+function AdminDashboard() {
   const router = useRouter();
   const { invoices } = useInvoices();
   const { contacts } = useContacts();
   const { tasks } = useTasks();
   const { spaces } = useClientSpaces();
+  const { purchases } = usePurchases();
+  const { taxModels } = useTaxModels();
 
+  const since = D.daysAgo(30);
   const totalMes = invoices
-    .filter((i) => i.issueDate >= D.daysAgo(30) && i.status !== "borrador")
+    .filter((i) => i.issueDate >= since && i.status !== "borrador")
     .reduce((s, i) => s + i.total, 0);
-  // Compras todavía usa mock (no hemos migrado esa tabla)
-  const gastosMes = D.PURCHASES
-    .filter((p: any) => p.date >= D.daysAgo(30))
-    .reduce((s: number, i: any) => s + i.total, 0);
+  const gastosMes = purchases
+    .filter((p) => p.issueDate >= since && p.status !== "borrador")
+    .reduce((s, p) => s + p.total, 0);
   const beneficio = totalMes - gastosMes;
   const margin = totalMes > 0 ? (beneficio / totalMes) * 100 : 0;
   const pendientes = invoices.filter((i) => i.status === "pendiente" || i.status === "vencida");
@@ -81,7 +114,7 @@ export function Dashboard() {
       {/* Main grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 16 }}>
         <div style={{ gridColumn: "span 8" }}><TreasuryCard /></div>
-        <div style={{ gridColumn: "span 4" }}><UpcomingCard invoices={invoices} /></div>
+        <div style={{ gridColumn: "span 4" }}><UpcomingCard invoices={invoices} taxModels={taxModels} /></div>
         <div style={{ gridColumn: "span 6" }}><TopClientsCard contacts={contacts} onOpen={(id) => router.push(`/contactos?open=${id}`)} /></div>
         <div style={{ gridColumn: "span 6" }}><TimelineCard /></div>
         <div style={{ gridColumn: "span 6" }}>
@@ -211,7 +244,7 @@ function TreasuryCard() {
   );
 }
 
-function UpcomingCard({ invoices }: { invoices: any[] }) {
+function UpcomingCard({ invoices, taxModels }: { invoices: any[]; taxModels: any[] }) {
   const upcoming = [
     ...invoices
       .filter((i) => (i.status === "pendiente" || i.status === "vencida") && i.dueDate)
@@ -223,7 +256,7 @@ function UpcomingCard({ invoices }: { invoices: any[] }) {
         amount: i.total,
         status: i.status,
       })),
-    ...D.TAX_MODELS.filter((m: any) => m.status === "pendiente").map((m: any) => ({
+    ...taxModels.filter((m) => m.status === "pendiente").map((m) => ({
       type: "impuesto",
       name: m.name,
       subtitle: m.description,

@@ -8,7 +8,7 @@ import { Th, Td } from "@/components/screens/contactos";
 import { useContacts } from "@/lib/db/useContacts";
 import { usePurchases } from "@/lib/db/usePurchases";
 import { StatCard } from "@/components/screens/ventas/shared";
-import { ComprasHeader } from "./shared";
+import { ComprasHeader, PAYMENT_METHODS_PURCHASE, EXPENSE_CATEGORIES } from "./shared";
 import * as D from "@/lib/data";
 
 const statusTone: Record<string, any> = {
@@ -17,6 +17,29 @@ const statusTone: Record<string, any> = {
   vencida: "error",
   borrador: "outline",
 };
+
+// ---- CSV helpers ----
+const csvEscape = (v: any) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const csvDate = (d: any) => {
+  if (!d) return "";
+  const dt = d instanceof Date ? d : new Date(d);
+  return isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10);
+};
+function downloadCSV(filename: string, rows: any[][]) {
+  const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export function GastosScreen() {
   const router = useRouter();
@@ -29,19 +52,68 @@ export function GastosScreen() {
     return m;
   }, [contacts]);
 
+  // ---- Filtros básicos ----
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
 
-  const filtered = purchases.filter((p) => {
-    if (statusFilter !== "todos" && p.status !== statusFilter) return false;
-    if (search) {
+  // ---- Filtros avanzados ----
+  const [showFilters, setShowFilters] = useState(false);
+  const [fSupplier, setFSupplier] = useState("");
+  const [fCategory, setFCategory] = useState("");
+  const [fSource, setFSource] = useState(""); // upload | email | scan
+  const [fMethod, setFMethod] = useState("");
+  const [fIssueFrom, setFIssueFrom] = useState("");
+  const [fIssueTo, setFIssueTo] = useState("");
+  const [fTotalMin, setFTotalMin] = useState("");
+  const [fTotalMax, setFTotalMax] = useState("");
+
+  const activeFilterCount =
+    (fSupplier ? 1 : 0) +
+    (fCategory ? 1 : 0) +
+    (fSource ? 1 : 0) +
+    (fMethod ? 1 : 0) +
+    (fIssueFrom || fIssueTo ? 1 : 0) +
+    (fTotalMin || fTotalMax ? 1 : 0);
+
+  const clearFilters = () => {
+    setFSupplier(""); setFCategory(""); setFSource(""); setFMethod("");
+    setFIssueFrom(""); setFIssueTo("");
+    setFTotalMin(""); setFTotalMax("");
+  };
+
+  const filtered = useMemo(() => {
+    let r = purchases;
+    if (statusFilter !== "todos") r = r.filter((p) => p.status === statusFilter);
+    if (search.trim()) {
       const q = search.toLowerCase();
-      const sup = contactsMap.get(p.supplierId || "");
-      const hay = [p.number, p.concept, p.category, sup?.name].filter(Boolean).join(" ").toLowerCase();
-      if (!hay.includes(q)) return false;
+      r = r.filter((p) => {
+        const sup = contactsMap.get(p.supplierId || "");
+        return [p.number, p.concept, p.category, sup?.name].filter(Boolean).join(" ").toLowerCase().includes(q);
+      });
     }
-    return true;
-  });
+    if (fSupplier) r = r.filter((p) => p.supplierId === fSupplier);
+    if (fCategory) r = r.filter((p) => (p.category || "") === fCategory);
+    if (fSource) r = r.filter((p) => p.source === fSource);
+    if (fMethod) r = r.filter((p) => p.paymentMethod === fMethod);
+    if (fIssueFrom) {
+      const d = new Date(fIssueFrom);
+      r = r.filter((p) => new Date(p.issueDate) >= d);
+    }
+    if (fIssueTo) {
+      const d = new Date(fIssueTo);
+      d.setHours(23, 59, 59, 999);
+      r = r.filter((p) => new Date(p.issueDate) <= d);
+    }
+    const tmin = fTotalMin === "" ? null : Number(fTotalMin);
+    const tmax = fTotalMax === "" ? null : Number(fTotalMax);
+    if (tmin !== null && !Number.isNaN(tmin)) r = r.filter((p) => p.total >= tmin);
+    if (tmax !== null && !Number.isNaN(tmax)) r = r.filter((p) => p.total <= tmax);
+    return r;
+  }, [
+    purchases, contactsMap, statusFilter, search,
+    fSupplier, fCategory, fSource, fMethod,
+    fIssueFrom, fIssueTo, fTotalMin, fTotalMax,
+  ]);
 
   const totals = {
     mes: purchases
@@ -52,6 +124,52 @@ export function GastosScreen() {
     vencido: purchases.filter((p) => p.status === "vencida").reduce((s, p) => s + p.total, 0),
   };
 
+  // Opciones de proveedores (solo los que tienen al menos un gasto)
+  const supplierOptions = useMemo(() => {
+    const ids = new Set(purchases.map((p) => p.supplierId).filter(Boolean));
+    return Array.from(ids)
+      .map((id) => contactsMap.get(id as string))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [purchases, contactsMap]);
+
+  // Categorías que aparecen en los gastos + sugeridas
+  const categoryOptions = useMemo(() => {
+    const used = new Set(purchases.map((p) => p.category).filter(Boolean) as string[]);
+    EXPENSE_CATEGORIES.forEach((c) => used.add(c));
+    return Array.from(used).sort((a, b) => a.localeCompare(b, "es"));
+  }, [purchases]);
+
+  // Export CSV
+  const exportCSV = () => {
+    const headers = [
+      "Nº doc.", "Proveedor", "Concepto", "Categoría", "Cuenta",
+      "Fecha emisión", "Fecha pago", "Método pago", "Origen",
+      "Base", "IVA", "Retención IRPF %", "Retención IRPF €", "Total", "Estado",
+    ];
+    const rows = filtered.map((p) => {
+      const sup = contactsMap.get(p.supplierId || "");
+      return [
+        p.number || "",
+        sup?.name || "",
+        p.concept || "",
+        p.category || "",
+        p.account || "",
+        csvDate(p.issueDate),
+        csvDate(p.payDate),
+        p.paymentMethod || "",
+        p.source || "",
+        p.base,
+        p.vat,
+        p.retentionPct || 0,
+        p.retention || 0,
+        p.total,
+        p.status,
+      ];
+    });
+    downloadCSV(`gastos_${new Date().toISOString().slice(0, 10)}.csv`, [headers, ...rows]);
+  };
+
   return (
     <div style={{ padding: "28px 32px 48px", maxWidth: 1440, margin: "0 auto" }}>
       <ComprasHeader
@@ -59,6 +177,8 @@ export function GastosScreen() {
         title="Gastos"
         description="Facturas recibidas y otros gastos"
         primary={{ label: "Nuevo gasto", icon: "plus", onClick: () => router.push("/compras/gastos/nuevo") }}
+        onExport={exportCSV}
+        exportDisabled={filtered.length === 0}
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 16 }}>
@@ -98,10 +218,84 @@ export function GastosScreen() {
             </button>
           ))}
         </div>
-        <Button variant="ghost" size="sm" leftIcon={<Icon name="filter" size={13} />}>Más filtros</Button>
+        <Button
+          variant={showFilters || activeFilterCount > 0 ? "primary" : "ghost"}
+          size="sm"
+          leftIcon={<Icon name="filter" size={13} />}
+          onClick={() => setShowFilters((v) => !v)}
+        >
+          Más filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </Button>
       </div>
 
-      <Card padding={0} style={{ overflow: "hidden" }}>
+      {/* Panel filtros avanzados */}
+      {showFilters && (
+        <Card padding={16} style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Filtros avanzados
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>Limpiar todo</Button>
+              )}
+              <Button variant="ghost" size="iconSm" onClick={() => setShowFilters(false)} title="Cerrar">
+                <Icon name="close" size={13} />
+              </Button>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            <FilterField label="Proveedor">
+              <select value={fSupplier} onChange={(e) => setFSupplier(e.target.value)} style={filterSelectStyle}>
+                <option value="">Cualquiera</option>
+                {supplierOptions.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </FilterField>
+            <FilterField label="Categoría">
+              <select value={fCategory} onChange={(e) => setFCategory(e.target.value)} style={filterSelectStyle}>
+                <option value="">Cualquiera</option>
+                {categoryOptions.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </FilterField>
+            <FilterField label="Origen">
+              <select value={fSource} onChange={(e) => setFSource(e.target.value)} style={filterSelectStyle}>
+                <option value="">Cualquiera</option>
+                <option value="upload">Subido manualmente</option>
+                <option value="email">Recibido por email</option>
+                <option value="scan">Escaneado</option>
+              </select>
+            </FilterField>
+            <FilterField label="Método de pago">
+              <select value={fMethod} onChange={(e) => setFMethod(e.target.value)} style={filterSelectStyle}>
+                <option value="">Cualquiera</option>
+                {PAYMENT_METHODS_PURCHASE.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </FilterField>
+            <FilterField label="Fecha emisión (desde – hasta)">
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Input type="date" value={fIssueFrom} onChange={(e) => setFIssueFrom(e.target.value)} />
+                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                <Input type="date" value={fIssueTo} onChange={(e) => setFIssueTo(e.target.value)} />
+              </div>
+            </FilterField>
+            <FilterField label="Total (€)">
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Input type="number" value={fTotalMin} onChange={(e) => setFTotalMin(e.target.value)} placeholder="mín" />
+                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                <Input type="number" value={fTotalMax} onChange={(e) => setFTotalMax(e.target.value)} placeholder="máx" />
+              </div>
+            </FilterField>
+          </div>
+        </Card>
+      )}
+
+      <Card padding={0} style={{ overflow: "visible" }}>
         <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 13 }}>
           <thead>
             <tr style={{ background: "var(--beige-bg)" }}>
@@ -244,3 +438,24 @@ export function GastosScreen() {
     </div>
   );
 }
+
+// ---- Helpers UI ----
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
+      <span style={{
+        fontSize: 10.5, fontWeight: 500, color: "var(--text-muted)",
+        textTransform: "uppercase", letterSpacing: "0.05em",
+      }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+const filterSelectStyle: React.CSSProperties = {
+  height: 34, width: "100%", padding: "0 10px",
+  border: "1px solid var(--border)", borderRadius: 7,
+  background: "var(--surface)", outline: "none", fontSize: 13, fontFamily: "inherit",
+};

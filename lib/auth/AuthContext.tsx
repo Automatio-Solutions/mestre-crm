@@ -1,11 +1,23 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
+export type Scope =
+  | "*"
+  | "dashboard"
+  | "contactos"
+  | "ventas"
+  | "compras"
+  | "contabilidad"
+  | "impuestos"
+  | "analitica"
+  | "proyectos";
+
 export interface CurrentUser {
   id: string;
   email: string;
   name: string;
   userRef: string | null;   // u1, u7… vincula a USERS de lib/data
+  scopes: Scope[];
   isActive: boolean;
 }
 
@@ -14,6 +26,8 @@ interface AuthContextValue {
   loading: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
+  /** Devuelve true si el usuario tiene ese scope (o '*' = admin). */
+  hasScope: (scope: Scope) => boolean;
 }
 
 const AuthCtx = createContext<AuthContextValue>({
@@ -21,6 +35,7 @@ const AuthCtx = createContext<AuthContextValue>({
   loading: true,
   refresh: async () => {},
   logout: async () => {},
+  hasScope: () => false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -64,8 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh();
   }, []);
 
+  const hasScope = (scope: Scope) => {
+    if (!user) return false;
+    if (user.scopes.includes("*")) return true;
+    return user.scopes.includes(scope);
+  };
+
   return (
-    <AuthCtx.Provider value={{ user, loading, refresh, logout }}>
+    <AuthCtx.Provider value={{ user, loading, refresh, logout, hasScope }}>
       {children}
     </AuthCtx.Provider>
   );

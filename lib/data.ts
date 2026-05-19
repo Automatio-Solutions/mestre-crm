@@ -396,6 +396,70 @@ export const TAX_MODELS = [
 ];
 
 // ============================================================
+// PLAN GENERAL CONTABLE — subset español más usado
+// (Supabase: tabla chart_of_accounts)
+// ============================================================
+export const PGC_ACCOUNTS = [
+  // Grupo 1 — Financiación básica (patrimonio + pasivo a largo)
+  { code: '100', name: 'Capital social',                                 type: 'patrimonio', group: '1' },
+  { code: '112', name: 'Reserva legal',                                  type: 'patrimonio', group: '1' },
+  { code: '113', name: 'Reservas voluntarias',                           type: 'patrimonio', group: '1' },
+  { code: '129', name: 'Resultado del ejercicio',                        type: 'patrimonio', group: '1' },
+  { code: '170', name: 'Deudas a largo plazo con entidades de crédito',  type: 'pasivo',     group: '1' },
+
+  // Grupo 2 — Activo no corriente
+  { code: '206', name: 'Aplicaciones informáticas',                      type: 'activo',     group: '2' },
+  { code: '216', name: 'Mobiliario',                                     type: 'activo',     group: '2' },
+  { code: '217', name: 'Equipos para procesos de información',           type: 'activo',     group: '2' },
+  { code: '281', name: 'Amortización acumulada del inmovilizado material', type: 'activo',   group: '2' },
+
+  // Grupo 4 — Acreedores y deudores por operaciones comerciales
+  { code: '400', name: 'Proveedores',                                    type: 'pasivo',     group: '4' },
+  { code: '410', name: 'Acreedores por prestación de servicios',         type: 'pasivo',     group: '4' },
+  { code: '430', name: 'Clientes',                                       type: 'activo',     group: '4' },
+  { code: '440', name: 'Deudores varios',                                type: 'activo',     group: '4' },
+  { code: '465', name: 'Remuneraciones pendientes de pago',              type: 'pasivo',     group: '4' },
+  { code: '470', name: 'Hacienda Pública deudora por diversos conceptos', type: 'activo',    group: '4' },
+  { code: '472', name: 'Hacienda Pública IVA soportado',                 type: 'activo',     group: '4' },
+  { code: '473', name: 'Hacienda Pública retenciones y pagos a cuenta',  type: 'activo',     group: '4' },
+  { code: '475', name: 'Hacienda Pública acreedora por conceptos fiscales', type: 'pasivo',  group: '4' },
+  { code: '476', name: 'Organismos de la Seguridad Social acreedores',   type: 'pasivo',     group: '4' },
+  { code: '477', name: 'Hacienda Pública IVA repercutido',               type: 'pasivo',     group: '4' },
+
+  // Grupo 5 — Cuentas financieras
+  { code: '520', name: 'Deudas a corto plazo con entidades de crédito',  type: 'pasivo',     group: '5' },
+  { code: '570', name: 'Caja, euros',                                    type: 'activo',     group: '5' },
+  { code: '572', name: 'Bancos e instituciones de crédito c/c vista, euros', type: 'activo', group: '5' },
+
+  // Grupo 6 — Compras y gastos
+  { code: '600', name: 'Compras de mercaderías',                         type: 'gasto',      group: '6' },
+  { code: '621', name: 'Arrendamientos y cánones',                       type: 'gasto',      group: '6' },
+  { code: '622', name: 'Reparaciones y conservación',                    type: 'gasto',      group: '6' },
+  { code: '623', name: 'Servicios de profesionales independientes',      type: 'gasto',      group: '6' },
+  { code: '625', name: 'Primas de seguros',                              type: 'gasto',      group: '6' },
+  { code: '626', name: 'Servicios bancarios y similares',                type: 'gasto',      group: '6' },
+  { code: '627', name: 'Publicidad, propaganda y relaciones públicas',   type: 'gasto',      group: '6' },
+  { code: '628', name: 'Suministros',                                    type: 'gasto',      group: '6' },
+  { code: '629', name: 'Otros servicios',                                type: 'gasto',      group: '6' },
+  { code: '631', name: 'Otros tributos',                                 type: 'gasto',      group: '6' },
+  { code: '640', name: 'Sueldos y salarios',                             type: 'gasto',      group: '6' },
+  { code: '641', name: 'Indemnizaciones',                                type: 'gasto',      group: '6' },
+  { code: '642', name: 'Seguridad Social a cargo de la empresa',         type: 'gasto',      group: '6' },
+  { code: '662', name: 'Intereses de deudas',                            type: 'gasto',      group: '6' },
+  { code: '669', name: 'Otros gastos financieros',                       type: 'gasto',      group: '6' },
+  { code: '681', name: 'Amortización del inmovilizado material',         type: 'gasto',      group: '6' },
+
+  // Grupo 7 — Ventas e ingresos
+  { code: '700', name: 'Ventas de mercaderías',                          type: 'ingreso',    group: '7' },
+  { code: '705', name: 'Prestaciones de servicios',                      type: 'ingreso',    group: '7' },
+  { code: '708', name: 'Devoluciones de ventas y operaciones similares', type: 'ingreso',    group: '7' },
+  { code: '709', name: 'Rappels sobre ventas',                           type: 'ingreso',    group: '7' },
+  { code: '755', name: 'Ingresos por servicios al personal',             type: 'ingreso',    group: '7' },
+  { code: '759', name: 'Ingresos por servicios diversos',                type: 'ingreso',    group: '7' },
+  { code: '769', name: 'Otros ingresos financieros',                     type: 'ingreso',    group: '7' },
+];
+
+// ============================================================
 // CONTABILIDAD — asientos (libro diario)
 // ============================================================
 export const ACCOUNTING = [
@@ -421,6 +485,69 @@ export const ACCOUNTING = [
 // ============================================================
 // BANCOS
 // ============================================================
+// ============================================================
+// EMPLEADOS — nóminas mensuales (Supabase: tabla employees)
+// Cifras orientativas con desglose IRPF / SS típico español.
+// ============================================================
+export const EMPLOYEES = [
+  {
+    id: 'e1',
+    name: 'Noelia Pérez García',
+    role: 'Diseñadora senior',
+    contractType: 'Indefinido',
+    active: true,
+    grossMonth: 2500, netMonth: 1955,
+    irpf: 386, ssEmployer: 760, ssEmployee: 159,
+    email: 'noelia@danimestre.com',
+    dni: '47852136X',
+    hireDate: daysAgo(720),
+    endDate: null,
+    notes: null,
+  },
+  {
+    id: 'e2',
+    name: 'Marc Vidal Aldea',
+    role: 'Project manager',
+    contractType: 'Indefinido',
+    active: true,
+    grossMonth: 2800, netMonth: 2148,
+    irpf: 482, ssEmployer: 850, ssEmployee: 178,
+    email: 'marc@danimestre.com',
+    dni: '38291470Y',
+    hireDate: daysAgo(420),
+    endDate: null,
+    notes: 'Responsable de coordinación con cuentas clave.',
+  },
+  {
+    id: 'e3',
+    name: 'Carla Soto Rodríguez',
+    role: 'Diseñadora junior',
+    contractType: 'Prácticas',
+    active: true,
+    grossMonth: 1100, netMonth: 967,
+    irpf: 63, ssEmployer: 220, ssEmployee: 70,
+    email: 'carla@danimestre.com',
+    dni: '52910384B',
+    hireDate: daysAgo(120),
+    endDate: null,
+    notes: 'Convenio prácticas universidad.',
+  },
+  {
+    id: 'e4',
+    name: 'María López Bravo',
+    role: 'Contable externa',
+    contractType: 'Autónomo',
+    active: true,
+    grossMonth: 850, netMonth: 723,
+    irpf: 127, ssEmployer: 0, ssEmployee: 0,
+    email: 'maria.lopez@gestoria-bravo.es',
+    dni: '60473921Q',
+    hireDate: daysAgo(900),
+    endDate: null,
+    notes: 'Factura mensual por servicios — IRPF 15%.',
+  },
+];
+
 export const BANK_ACCOUNTS = [
   { id:'b1', name:'BBVA Empresa',   logo:'BBVA', color:'#004481', iban:'ES21 0182 **** 9023', balance: 32450.12, synced: true,  lastSync: daysAgo(0) },
   { id:'b2', name:'CaixaBank Pro',  logo:'LCB',  color:'#02458F', iban:'ES55 2100 **** 1145', balance: 14220.78, synced: true,  lastSync: daysAgo(0) },

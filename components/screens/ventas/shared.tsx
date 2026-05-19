@@ -55,12 +55,14 @@ export const Toggle = ({ checked }: { checked: boolean }) => (
 // Cabecera unificada para todas las pantallas de Ventas.
 // Nota: el breadcrumb vive en el header global (AppShell); aquí solo título + descripción.
 export const VentasHeader = ({
-  section, title, description, primary,
+  section, title, description, primary, onExport, exportDisabled,
 }: {
   section: string;
   title: string;
   description: string;
-  primary?: { label: string; icon: string; onClick?: () => void };
+  primary?: { label: string; icon: string; onClick?: () => void; disabled?: boolean };
+  onExport?: () => void;
+  exportDisabled?: boolean;
 }) => (
   <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 20, gap: 20 }}>
     <div>
@@ -68,9 +70,23 @@ export const VentasHeader = ({
       <p style={{ color: "var(--text-muted)", margin: "4px 0 0", fontSize: 13 }}>{description}</p>
     </div>
     <div style={{ display: "flex", gap: 8 }}>
-      <Button variant="outline" leftIcon={<Icon name="download" size={14} />}>Exportar</Button>
+      {onExport && (
+        <Button
+          variant="outline"
+          leftIcon={<Icon name="download" size={14} />}
+          onClick={onExport}
+          disabled={exportDisabled}
+        >
+          Exportar
+        </Button>
+      )}
       {primary && (
-        <Button variant="primary" leftIcon={<Icon name={primary.icon} size={14} />} onClick={primary.onClick}>
+        <Button
+          variant="primary"
+          leftIcon={<Icon name={primary.icon} size={14} />}
+          onClick={primary.onClick}
+          disabled={primary.disabled}
+        >
           {primary.label}
         </Button>
       )}

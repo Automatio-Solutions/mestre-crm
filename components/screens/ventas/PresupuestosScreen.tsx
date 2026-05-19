@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Icon, Card, Badge, Avatar, Dropdown, DropdownItem, DropdownSeparator, useConfirm } from "@/components/ui";
+import { Icon, Button, Card, Badge, Avatar, Input, Dropdown, DropdownItem, DropdownSeparator, useConfirm } from "@/components/ui";
 import { Th, Td } from "@/components/screens/contactos";
 import { useContacts } from "@/lib/db/useContacts";
 import { useQuotes } from "@/lib/db/useQuotes";
@@ -9,6 +9,29 @@ import { StatCard, VentasHeader } from "./shared";
 import * as D from "@/lib/data";
 
 type View = "kanban" | "tabla";
+
+// ---- Helpers CSV (mismos que FacturasScreen, locales para no acoplar) ----
+const csvEscape = (v: any) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const csvDate = (d: any) => {
+  if (!d) return "";
+  const dt = d instanceof Date ? d : new Date(d);
+  return isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10);
+};
+function downloadCSV(filename: string, rows: any[][]) {
+  const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export function PresupuestosScreen() {
   const router = useRouter();
@@ -24,6 +47,110 @@ export function PresupuestosScreen() {
   const { quotes, loading, moveToStatus, remove, duplicate } = useQuotes();
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
+
+  // ---- Filtros (sólo afectan a la vista de tabla) ----
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("todos");
+  const [showFilters, setShowFilters] = useState(false);
+  const [fClient, setFClient] = useState("");
+  const [fOwner, setFOwner] = useState("");
+  const [fIssueFrom, setFIssueFrom] = useState("");
+  const [fIssueTo, setFIssueTo] = useState("");
+  const [fAmountMin, setFAmountMin] = useState("");
+  const [fAmountMax, setFAmountMax] = useState("");
+  const [fProbMin, setFProbMin] = useState("");
+  const [fProbMax, setFProbMax] = useState("");
+
+  const activeFilterCount =
+    (fClient ? 1 : 0) +
+    (fOwner ? 1 : 0) +
+    (fIssueFrom || fIssueTo ? 1 : 0) +
+    (fAmountMin || fAmountMax ? 1 : 0) +
+    (fProbMin || fProbMax ? 1 : 0);
+
+  const clearFilters = () => {
+    setFClient(""); setFOwner("");
+    setFIssueFrom(""); setFIssueTo("");
+    setFAmountMin(""); setFAmountMax("");
+    setFProbMin(""); setFProbMax("");
+  };
+
+  const filteredQuotes = useMemo(() => {
+    let r = quotes;
+    if (statusFilter !== "todos") r = r.filter((q) => q.status === statusFilter);
+    if (search.trim()) {
+      const lq = search.toLowerCase();
+      r = r.filter((q) =>
+        ((q.number || "") + " " + (q.concept || "")).toLowerCase().includes(lq)
+      );
+    }
+    if (fClient) r = r.filter((q) => q.clientId === fClient);
+    if (fOwner) r = r.filter((q) => q.owner === fOwner);
+    if (fIssueFrom) {
+      const d = new Date(fIssueFrom);
+      r = r.filter((q) => new Date(q.issueDate) >= d);
+    }
+    if (fIssueTo) {
+      const d = new Date(fIssueTo);
+      d.setHours(23, 59, 59, 999);
+      r = r.filter((q) => new Date(q.issueDate) <= d);
+    }
+    const amin = fAmountMin === "" ? null : Number(fAmountMin);
+    const amax = fAmountMax === "" ? null : Number(fAmountMax);
+    if (amin !== null && !Number.isNaN(amin)) r = r.filter((q) => q.amount >= amin);
+    if (amax !== null && !Number.isNaN(amax)) r = r.filter((q) => q.amount <= amax);
+    const pmin = fProbMin === "" ? null : Number(fProbMin);
+    const pmax = fProbMax === "" ? null : Number(fProbMax);
+    if (pmin !== null && !Number.isNaN(pmin)) r = r.filter((q) => (q.probability || 0) >= pmin);
+    if (pmax !== null && !Number.isNaN(pmax)) r = r.filter((q) => (q.probability || 0) <= pmax);
+    return r;
+  }, [
+    quotes, statusFilter, search,
+    fClient, fOwner, fIssueFrom, fIssueTo,
+    fAmountMin, fAmountMax, fProbMin, fProbMax,
+  ]);
+
+  // Clientes y responsables únicos (de los presupuestos)
+  const clientOptions = useMemo(() => {
+    const ids = new Set(quotes.map((q) => q.clientId).filter(Boolean));
+    return Array.from(ids)
+      .map((id) => contactsMap.get(id as string))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [quotes, contactsMap]);
+
+  const ownerOptions = useMemo(() => {
+    const ids = new Set(quotes.map((q) => q.owner).filter(Boolean));
+    return Array.from(ids).map((id) => D.userById(id as string)).filter(Boolean);
+  }, [quotes]);
+
+  // Lista que usa la TABLA (con filtros). El kanban sigue mostrando todos.
+  const tableQuotes = filteredQuotes;
+
+  // ---- Export CSV ----
+  const exportCSV = () => {
+    const list = view === "tabla" ? tableQuotes : quotes;
+    const headers = [
+      "Número", "Cliente", "Concepto", "Responsable",
+      "Emisión", "Expiración", "Importe", "Probabilidad", "Estado",
+    ];
+    const rows = list.map((q) => {
+      const cli = contactsMap.get(q.clientId || "");
+      const owner = q.owner ? D.userById(q.owner) : null;
+      return [
+        q.number || "",
+        cli?.name || "",
+        q.concept || "",
+        owner?.name || "",
+        csvDate(q.issueDate),
+        csvDate(q.expireDate),
+        q.amount,
+        q.probability ?? "",
+        q.status,
+      ];
+    });
+    downloadCSV(`presupuestos_${new Date().toISOString().slice(0, 10)}.csv`, [headers, ...rows]);
+  };
 
   const byStatus: Record<string, any[]> = {};
   (D.QUOTE_STATUSES as any[]).forEach((s) => { byStatus[s.id] = []; });
@@ -59,6 +186,8 @@ export function PresupuestosScreen() {
           icon: "plus",
           onClick: () => router.push("/ventas/presupuestos/nuevo"),
         }}
+        onExport={exportCSV}
+        exportDisabled={(view === "tabla" ? tableQuotes.length : quotes.length) === 0}
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 16 }}>
@@ -319,6 +448,110 @@ export function PresupuestosScreen() {
       )}
 
       {!loading && view === "tabla" && (
+        <>
+          {/* Toolbar de filtros (solo en vista de tabla) */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, maxWidth: 320 }}>
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar número, concepto…"
+                leftIcon={<Icon name="search" size={14} />}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 4, background: "var(--beige-bg)", padding: 3, borderRadius: 8, border: "1px solid var(--border)", flexWrap: "wrap" }}>
+              {[{ id: "todos", label: "Todos" }, ...(D.QUOTE_STATUSES as any[]).map((s) => ({ id: s.id, label: s.name }))].map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setStatusFilter(s.id)}
+                  style={{
+                    padding: "5px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+                    background: statusFilter === s.id ? "var(--surface)" : "transparent",
+                    color: statusFilter === s.id ? "var(--text)" : "var(--text-muted)",
+                    boxShadow: statusFilter === s.id ? "var(--shadow-sm)" : "none",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <Button
+              variant={showFilters || activeFilterCount > 0 ? "primary" : "ghost"}
+              size="sm"
+              leftIcon={<Icon name="filter" size={13} />}
+              onClick={() => setShowFilters((v) => !v)}
+            >
+              Más filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </Button>
+          </div>
+
+          {/* Panel de filtros */}
+          {showFilters && (
+            <Card padding={16} style={{ marginBottom: 12 }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                marginBottom: 12,
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 600, color: "var(--text-muted)",
+                  textTransform: "uppercase", letterSpacing: "0.06em",
+                }}>
+                  Filtros avanzados
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {activeFilterCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearFilters}>
+                      Limpiar todo
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="iconSm" onClick={() => setShowFilters(false)} title="Cerrar">
+                    <Icon name="close" size={13} />
+                  </Button>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                <FilterField label="Cliente">
+                  <select value={fClient} onChange={(e) => setFClient(e.target.value)} style={filterSelectStyle}>
+                    <option value="">Cualquiera</option>
+                    {clientOptions.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </FilterField>
+                <FilterField label="Responsable">
+                  <select value={fOwner} onChange={(e) => setFOwner(e.target.value)} style={filterSelectStyle}>
+                    <option value="">Cualquiera</option>
+                    {ownerOptions.map((u: any) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </FilterField>
+                <FilterField label="Fecha emisión (desde – hasta)">
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <Input type="date" value={fIssueFrom} onChange={(e) => setFIssueFrom(e.target.value)} />
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                    <Input type="date" value={fIssueTo} onChange={(e) => setFIssueTo(e.target.value)} />
+                  </div>
+                </FilterField>
+                <FilterField label="Importe (€)">
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <Input type="number" value={fAmountMin} onChange={(e) => setFAmountMin(e.target.value)} placeholder="mín" />
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                    <Input type="number" value={fAmountMax} onChange={(e) => setFAmountMax(e.target.value)} placeholder="máx" />
+                  </div>
+                </FilterField>
+                <FilterField label="Probabilidad (%)">
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <Input type="number" value={fProbMin} onChange={(e) => setFProbMin(e.target.value)} placeholder="0" />
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                    <Input type="number" value={fProbMax} onChange={(e) => setFProbMax(e.target.value)} placeholder="100" />
+                  </div>
+                </FilterField>
+              </div>
+            </Card>
+          )}
+
         <Card padding={0} style={{ overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 13 }}>
             <thead>
@@ -336,7 +569,16 @@ export function PresupuestosScreen() {
               </tr>
             </thead>
             <tbody>
-              {quotes.map((q) => {
+              {tableQuotes.length === 0 && (
+                <tr>
+                  <td colSpan={10} style={{ padding: 36, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+                    {quotes.length === 0
+                      ? "Sin presupuestos todavía."
+                      : "Sin resultados. Prueba con otros filtros."}
+                  </td>
+                </tr>
+              )}
+              {tableQuotes.map((q) => {
                 const cli = contactsMap.get(q.clientId || "");
                 const owner = q.owner ? D.userById(q.owner) : null;
                 const st = (D.QUOTE_STATUSES as any[]).find((s) => s.id === q.status);
@@ -435,7 +677,29 @@ export function PresupuestosScreen() {
             </tbody>
           </table>
         </Card>
+        </>
       )}
     </div>
   );
 }
+
+// ---- Helpers UI ----
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
+      <span style={{
+        fontSize: 10.5, fontWeight: 500, color: "var(--text-muted)",
+        textTransform: "uppercase", letterSpacing: "0.05em",
+      }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+const filterSelectStyle: React.CSSProperties = {
+  height: 34, width: "100%", padding: "0 10px",
+  border: "1px solid var(--border)", borderRadius: 7,
+  background: "var(--surface)", outline: "none", fontSize: 13, fontFamily: "inherit",
+};

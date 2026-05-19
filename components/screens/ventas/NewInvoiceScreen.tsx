@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Icon, Button, Card, Badge, Input, Dropdown, DropdownItem, DropdownSeparator,
 } from "@/components/ui";
 import { useInvoices } from "@/lib/db/useInvoices";
 import { useContacts } from "@/lib/db/useContacts";
+import { useProformas } from "@/lib/db/useProformas";
 import {
   type Invoice, type InvoiceLine, type PaymentMethod,
   calcLineSubtotal, calcLineVat, calcInvoiceTotals, emptyLine,
@@ -16,10 +17,11 @@ import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { generateInvoicePdf } from "@/lib/pdf/generateInvoicePdf";
 import { InvoiceDocument } from "./InvoiceDocument";
 import { AutoResizeTextarea } from "./AutoResizeTextarea";
+import { COMPANY } from "@/lib/company";
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; defaultNotes: string }[] = [
   { id: "none", label: "No seleccionada", defaultNotes: "" },
-  { id: "transferencia", label: "Transferencia bancaria", defaultNotes: "Pagar por transferencia bancaria al siguiente número de cuenta\nES88 0182 1508 5202 0170 3834" },
+  { id: "transferencia", label: "Transferencia bancaria", defaultNotes: `Pagar por transferencia bancaria al siguiente número de cuenta\n${COMPANY.iban}` },
   { id: "contado", label: "Pago al contado", defaultNotes: "Pago al contado" },
   { id: "domiciliado", label: "Recibo Domiciliado en Cuenta", defaultNotes: "Recibo domiciliado en cuenta bancaria" },
 ];
@@ -49,11 +51,18 @@ const nextInvoiceNumber = () => {
  */
 export function NewInvoiceScreen({ invoiceId }: { invoiceId?: string } = {}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromProformaId = searchParams?.get("fromProforma") || null;
   const { contacts } = useContacts();
   const { invoices, create, update } = useInvoices();
+  const { proformas, update: updateProforma } = useProformas();
 
   const editing = invoiceId ? invoices.find((i) => i.id === invoiceId) : null;
   const isEdit = !!invoiceId;
+  const fromProforma = fromProformaId && !isEdit
+    ? proformas.find((p) => p.id === fromProformaId) || null
+    : null;
+  const [proformaPrefilled, setProformaPrefilled] = useState(false);
 
   const [number, setNumber] = useState("");
   const [clientId, setClientId] = useState<string>("");
@@ -104,6 +113,39 @@ export function NewInvoiceScreen({ invoiceId }: { invoiceId?: string } = {}) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing?.id, isEdit]);
+
+  // ----------------------------------------------------------
+  // Pre-cargar desde una proforma cuando viene ?fromProforma=ID
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (!fromProforma || proformaPrefilled || isEdit) return;
+    setClientId(fromProforma.clientId || "");
+    setIssueDate(toISODate(new Date()));
+    setDueDate(toISODate(new Date(Date.now() + 30 * 86400000)));
+
+    // Reconstruir líneas: si la proforma tiene desglose, copiarlo;
+    // si no, sintetizar una sola línea a partir de amount/vatPct.
+    if (fromProforma.lines && fromProforma.lines.length > 0) {
+      setLines(fromProforma.lines as InvoiceLine[]);
+      setShowDiscount(fromProforma.lines.some((l: any) => (l.discount || 0) > 0));
+    } else {
+      const vp = fromProforma.vatPct || 21;
+      const basePrice = +((fromProforma.amount || 0) / (1 + vp / 100)).toFixed(2);
+      setLines([{
+        ...emptyLine(),
+        concept: fromProforma.concept || "Anticipo",
+        description: "",
+        quantity: 1,
+        price: basePrice,
+        vat: vp,
+        discount: 0,
+      }]);
+    }
+    setInternalNote(fromProforma.internalNote || "");
+    setTagsInput((fromProforma.tags || []).join(", "));
+    setProformaPrefilled(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromProforma?.id]);
 
   // Totales
   const totals = useMemo(() => calcInvoiceTotals(lines), [lines]);
@@ -162,6 +204,18 @@ export function NewInvoiceScreen({ invoiceId }: { invoiceId?: string } = {}) {
         router.push(`/ventas/facturas/${editing.id}`);
       } else {
         const created = await create(payload);
+        // Si venimos de una proforma, marcarla como facturada y enlazarla
+        if (fromProforma) {
+          try {
+            await updateProforma(fromProforma.id, {
+              status: "facturada",
+              linkedInvoiceId: created.id,
+            });
+          } catch (e) {
+            // No interrumpas el flujo si esto falla; la factura ya está creada
+            console.error("Error linking proforma to invoice", e);
+          }
+        }
         router.push(`/ventas/facturas/${created.id}`);
       }
     } catch (e: any) {
@@ -229,6 +283,11 @@ export function NewInvoiceScreen({ invoiceId }: { invoiceId?: string } = {}) {
         <h1 style={{ fontSize: 18, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>
           {isEdit ? `Editar factura ${number}` : "Nueva factura"}
         </h1>
+        {fromProforma && (
+          <Badge tone="purple">
+            Convirtiendo proforma {fromProforma.number}
+          </Badge>
+        )}
         <div style={{ flex: 1 }} />
         <Button
           variant="ghost"

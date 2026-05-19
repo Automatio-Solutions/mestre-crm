@@ -16,18 +16,226 @@ import * as D from "@/lib/data";
 
 type Tab = "facturas" | "recurrentes" | "remesas";
 
+// ============================================================
+// Helpers CSV
+// ============================================================
+const csvEscape = (v: any) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const csvDate = (d: any) => {
+  if (!d) return "";
+  const dt = d instanceof Date ? d : new Date(d);
+  return isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10);
+};
+function downloadCSV(filename: string, rows: any[][]) {
+  const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// FacturasScreen — orquestador
+// ============================================================
 export function FacturasScreen() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("facturas");
-  // Hooks llamados UNA vez aquí; los sub-tabs reciben los datos como props
+
+  // ---- Hooks compartidos ----
   const invoicesHook = useInvoices();
   const contactsHook = useContacts();
+  const recurringHook = useRecurringInvoices();
+  const batchesHook = usePaymentBatches();
   const { invoices } = invoicesHook;
+  const { contacts } = contactsHook;
+  const { recurring } = recurringHook;
+  const { batches } = batchesHook;
 
-  const primaryByTab: Record<Tab, { label: string; icon: string; onClick: () => void }> = {
-    facturas: { label: "Nueva factura", icon: "plus", onClick: () => router.push("/ventas/facturas/nueva") },
-    recurrentes: { label: "Nueva recurrente", icon: "plus", onClick: () => {} },
-    remesas: { label: "Generar remesa", icon: "bank", onClick: () => {} },
+  const contactsMap = useMemo(() => {
+    const m = new Map<string, any>();
+    contacts.forEach((c) => m.set(c.id, c));
+    return m;
+  }, [contacts]);
+
+  // ---- Facturas: estado de filtros (vive en parent para que el export funcione) ----
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("todos");
+  const [showFilters, setShowFilters] = useState(false);
+  const [fClient, setFClient] = useState("");
+  const [fIssueFrom, setFIssueFrom] = useState("");
+  const [fIssueTo, setFIssueTo] = useState("");
+  const [fTotalMin, setFTotalMin] = useState("");
+  const [fTotalMax, setFTotalMax] = useState("");
+
+  const activeFilterCount =
+    (fClient ? 1 : 0) +
+    (fIssueFrom || fIssueTo ? 1 : 0) +
+    (fTotalMin || fTotalMax ? 1 : 0);
+
+  const clearFilters = () => {
+    setFClient(""); setFIssueFrom(""); setFIssueTo(""); setFTotalMin(""); setFTotalMax("");
+  };
+
+  const filteredInvoices = useMemo(() => {
+    let r = invoices;
+    if (statusFilter !== "todos") r = r.filter((i) => i.status === statusFilter);
+    if (search.trim()) {
+      const lq = search.toLowerCase();
+      r = r.filter((i) =>
+        (i.number + " " + (i.concept || "")).toLowerCase().includes(lq)
+      );
+    }
+    if (fClient) r = r.filter((i) => i.clientId === fClient);
+    if (fIssueFrom) {
+      const d = new Date(fIssueFrom);
+      r = r.filter((i) => new Date(i.issueDate) >= d);
+    }
+    if (fIssueTo) {
+      const d = new Date(fIssueTo);
+      // hasta fin del día
+      d.setHours(23, 59, 59, 999);
+      r = r.filter((i) => new Date(i.issueDate) <= d);
+    }
+    const tmin = fTotalMin === "" ? null : Number(fTotalMin);
+    const tmax = fTotalMax === "" ? null : Number(fTotalMax);
+    if (tmin !== null && !Number.isNaN(tmin)) r = r.filter((i) => i.total >= tmin);
+    if (tmax !== null && !Number.isNaN(tmax)) r = r.filter((i) => i.total <= tmax);
+    return r;
+  }, [invoices, search, statusFilter, fClient, fIssueFrom, fIssueTo, fTotalMin, fTotalMax]);
+
+  // ---- Recurrentes: form modal (lifted) ----
+  const [recurringFormOpen, setRecurringFormOpen] = useState(false);
+  const [editingRecurring, setEditingRecurring] = useState<RecurringInvoice | null>(null);
+  const openNewRecurring = () => { setEditingRecurring(null); setRecurringFormOpen(true); };
+
+  // ---- Remesas: selección + estado de generación (lifted) ----
+  const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
+  const [generatingBatch, setGeneratingBatch] = useState(false);
+
+  const invoicesInBatches = useMemo(() => {
+    const s = new Set<string>();
+    batches.forEach((b) => b.invoiceIds.forEach((id) => s.add(id)));
+    return s;
+  }, [batches]);
+
+  const pendingForBatch = useMemo(
+    () => invoices.filter((i) => i.status === "pendiente" && !invoicesInBatches.has(i.id)),
+    [invoices, invoicesInBatches],
+  );
+
+  const generateBatch = async () => {
+    const ids = Array.from(selectedForBatch);
+    if (ids.length === 0) return;
+    const total = pendingForBatch
+      .filter((p) => selectedForBatch.has(p.id))
+      .reduce((s, p) => s + p.total, 0);
+    setGeneratingBatch(true);
+    try {
+      await batchesHook.create({ invoiceIds: ids, total });
+      setSelectedForBatch(new Set());
+    } catch (e) {
+      console.error(e);
+      alert("Error generando remesa");
+    } finally {
+      setGeneratingBatch(false);
+    }
+  };
+
+  // ---- Exports CSV por tab ----
+  const exportFacturasCSV = () => {
+    const headers = [
+      "Número", "Cliente", "Concepto", "Emisión", "Vencimiento",
+      "Base", "IVA", "Total", "Estado",
+    ];
+    const rows = filteredInvoices.map((i) => {
+      const cli = contactsMap.get(i.clientId as string);
+      return [
+        i.number,
+        cli?.name || "",
+        i.concept || "",
+        csvDate(i.issueDate),
+        csvDate(i.dueDate),
+        i.base,
+        +(i.total - i.base).toFixed(2),
+        i.total,
+        i.status,
+      ];
+    });
+    downloadCSV(`facturas_${new Date().toISOString().slice(0, 10)}.csv`, [headers, ...rows]);
+  };
+
+  const exportRecurrentesCSV = () => {
+    const headers = [
+      "Cliente", "Concepto", "Importe", "Frecuencia",
+      "Próxima emisión", "Activa", "Emitidas",
+    ];
+    const rows = recurring.map((r) => {
+      const cli = contactsMap.get(r.clientId || "");
+      return [
+        cli?.name || "",
+        r.concept || "",
+        r.amount,
+        r.frequency,
+        csvDate(r.nextDate),
+        r.active ? "sí" : "no",
+        r.issuedCount,
+      ];
+    });
+    downloadCSV(`recurrentes_${new Date().toISOString().slice(0, 10)}.csv`, [headers, ...rows]);
+  };
+
+  const exportRemesasCSV = () => {
+    const headers = [
+      "Referencia", "Fecha", "Estado", "Nº facturas", "Total (€)", "IDs facturas",
+    ];
+    const rows = batches.map((b) => [
+      b.ref,
+      csvDate(b.date),
+      b.status,
+      b.count,
+      b.total,
+      b.invoiceIds.join("|"),
+    ]);
+    downloadCSV(`remesas_${new Date().toISOString().slice(0, 10)}.csv`, [headers, ...rows]);
+  };
+
+  // ---- Primary y export por tab ----
+  const primaryByTab: Record<Tab, { label: string; icon: string; onClick: () => void; disabled?: boolean }> = {
+    facturas: {
+      label: "Nueva factura",
+      icon: "plus",
+      onClick: () => router.push("/ventas/facturas/nueva"),
+    },
+    recurrentes: {
+      label: "Nueva recurrente",
+      icon: "plus",
+      onClick: openNewRecurring,
+    },
+    remesas: {
+      label: generatingBatch ? "Generando…" : "Generar remesa",
+      icon: "bank",
+      onClick: generateBatch,
+      disabled: selectedForBatch.size === 0 || generatingBatch,
+    },
+  };
+
+  const exportByTab: Record<Tab, () => void> = {
+    facturas: exportFacturasCSV,
+    recurrentes: exportRecurrentesCSV,
+    remesas: exportRemesasCSV,
+  };
+
+  const exportDisabledByTab: Record<Tab, boolean> = {
+    facturas: filteredInvoices.length === 0,
+    recurrentes: recurring.length === 0,
+    remesas: batches.length === 0,
   };
 
   return (
@@ -37,14 +245,16 @@ export function FacturasScreen() {
         title="Facturas"
         description="Facturas emitidas a clientes"
         primary={primaryByTab[tab]}
+        onExport={exportByTab[tab]}
+        exportDisabled={exportDisabledByTab[tab]}
       />
 
       {/* Tabs internos */}
       <div style={{ display: "flex", gap: 6, borderBottom: "1px solid var(--border)", marginBottom: 20 }}>
         {([
           { id: "facturas", label: "Facturas", count: invoices.length, icon: "fileText" },
-          { id: "recurrentes", label: "Recurrentes", count: D.RECURRING_INVOICES.length, icon: "refresh" },
-          { id: "remesas", label: "Remesas SEPA", count: D.PAYMENT_BATCHES.length, icon: "bank" },
+          { id: "recurrentes", label: "Recurrentes", count: recurring.length, icon: "refresh" },
+          { id: "remesas", label: "Remesas SEPA", count: batches.length, icon: "bank" },
         ] as const).map((it) => {
           const active = it.id === tab;
           return (
@@ -77,38 +287,81 @@ export function FacturasScreen() {
         })}
       </div>
 
-      {tab === "facturas" && <FacturasTab invoicesHook={invoicesHook} contactsHook={contactsHook} />}
-      {tab === "recurrentes" && <RecurrentesTab />}
-      {tab === "remesas" && <RemesasTab invoicesHook={invoicesHook} contactsHook={contactsHook} />}
+      {tab === "facturas" && (
+        <FacturasTab
+          invoicesHook={invoicesHook}
+          contactsMap={contactsMap}
+          filtered={filteredInvoices}
+          search={search}
+          setSearch={setSearch}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          showFilters={showFilters}
+          setShowFilters={setShowFilters}
+          fClient={fClient} setFClient={setFClient}
+          fIssueFrom={fIssueFrom} setFIssueFrom={setFIssueFrom}
+          fIssueTo={fIssueTo} setFIssueTo={setFIssueTo}
+          fTotalMin={fTotalMin} setFTotalMin={setFTotalMin}
+          fTotalMax={fTotalMax} setFTotalMax={setFTotalMax}
+          activeFilterCount={activeFilterCount}
+          clearFilters={clearFilters}
+        />
+      )}
+      {tab === "recurrentes" && (
+        <RecurrentesTab
+          recurringHook={recurringHook}
+          contactsMap={contactsMap}
+          openNew={openNewRecurring}
+          formOpen={recurringFormOpen}
+          setFormOpen={setRecurringFormOpen}
+          editing={editingRecurring}
+          setEditing={setEditingRecurring}
+        />
+      )}
+      {tab === "remesas" && (
+        <RemesasTab
+          invoicesHook={invoicesHook}
+          contactsMap={contactsMap}
+          batchesHook={batchesHook}
+          pending={pendingForBatch}
+          selected={selectedForBatch}
+          setSelected={setSelectedForBatch}
+          generateBatch={generateBatch}
+          generating={generatingBatch}
+        />
+      )}
     </div>
   );
 }
 
-// ------------- Tab Facturas -------------
+// ============================================================
+// Tab Facturas
+// ============================================================
 function FacturasTab({
-  invoicesHook, contactsHook,
+  invoicesHook, contactsMap, filtered,
+  search, setSearch, statusFilter, setStatusFilter,
+  showFilters, setShowFilters,
+  fClient, setFClient, fIssueFrom, setFIssueFrom, fIssueTo, setFIssueTo,
+  fTotalMin, setFTotalMin, fTotalMax, setFTotalMax,
+  activeFilterCount, clearFilters,
 }: {
   invoicesHook: ReturnType<typeof useInvoices>;
-  contactsHook: ReturnType<typeof useContacts>;
+  contactsMap: Map<string, any>;
+  filtered: any[];
+  search: string; setSearch: (v: string) => void;
+  statusFilter: string; setStatusFilter: (v: string) => void;
+  showFilters: boolean; setShowFilters: (v: boolean | ((p: boolean) => boolean)) => void;
+  fClient: string; setFClient: (v: string) => void;
+  fIssueFrom: string; setFIssueFrom: (v: string) => void;
+  fIssueTo: string; setFIssueTo: (v: string) => void;
+  fTotalMin: string; setFTotalMin: (v: string) => void;
+  fTotalMax: string; setFTotalMax: (v: string) => void;
+  activeFilterCount: number;
+  clearFilters: () => void;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
   const { invoices, loading, update, remove, duplicate } = invoicesHook;
-  const { contacts } = contactsHook;
-  const contactsMap = useMemo(() => {
-    const m = new Map<string, any>();
-    contacts.forEach((c) => m.set(c.id, c));
-    return m;
-  }, [contacts]);
-
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("todos");
-
-  const filtered = invoices.filter((i) => {
-    if (statusFilter !== "todos" && i.status !== statusFilter) return false;
-    if (search && !((i.number + " " + (i.concept || "")).toLowerCase().includes(search.toLowerCase()))) return false;
-    return true;
-  });
 
   const totals = {
     emitido: invoices.filter((i) => i.status !== "borrador").reduce((s, i) => s + i.total, 0),
@@ -120,6 +373,15 @@ function FacturasTab({
   const statusTone: Record<string, any> = {
     pagada: "success", pendiente: "warning", vencida: "error", borrador: "outline", enviada: "purple",
   };
+
+  // Clientes únicos (entre los que tienen facturas)
+  const clientOptions = useMemo(() => {
+    const ids = new Set(invoices.map((i) => i.clientId).filter(Boolean));
+    return Array.from(ids)
+      .map((id) => contactsMap.get(id as string))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [invoices, contactsMap]);
 
   return (
     <>
@@ -161,8 +423,66 @@ function FacturasTab({
             </button>
           ))}
         </div>
-        <Button variant="ghost" size="sm" leftIcon={<Icon name="filter" size={13} />}>Más filtros</Button>
+        <Button
+          variant={showFilters || activeFilterCount > 0 ? "primary" : "ghost"}
+          size="sm"
+          leftIcon={<Icon name="filter" size={13} />}
+          onClick={() => setShowFilters((v: boolean) => !v)}
+        >
+          Más filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </Button>
       </div>
+
+      {/* Panel de filtros */}
+      {showFilters && (
+        <Card padding={16} style={{ marginBottom: 12 }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 12,
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 600, color: "var(--text-muted)",
+              textTransform: "uppercase", letterSpacing: "0.06em",
+            }}>
+              Filtros avanzados
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  Limpiar todo
+                </Button>
+              )}
+              <Button variant="ghost" size="iconSm" onClick={() => setShowFilters(false)} title="Cerrar">
+                <Icon name="close" size={13} />
+              </Button>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            <FilterField label="Cliente">
+              <select value={fClient} onChange={(e) => setFClient(e.target.value)} style={filterSelectStyle}>
+                <option value="">Cualquiera</option>
+                {clientOptions.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </FilterField>
+            <FilterField label="Fecha emisión (desde – hasta)">
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Input type="date" value={fIssueFrom} onChange={(e) => setFIssueFrom(e.target.value)} />
+                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                <Input type="date" value={fIssueTo} onChange={(e) => setFIssueTo(e.target.value)} />
+              </div>
+            </FilterField>
+            <FilterField label="Total (€)">
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Input type="number" value={fTotalMin} onChange={(e) => setFTotalMin(e.target.value)} placeholder="mín" />
+                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+                <Input type="number" value={fTotalMax} onChange={(e) => setFTotalMax(e.target.value)} placeholder="máx" />
+              </div>
+            </FilterField>
+          </div>
+        </Card>
+      )}
 
       <Card padding={0} style={{ overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 13 }}>
@@ -301,25 +621,27 @@ function FacturasTab({
   );
 }
 
-// ------------- Tab Recurrentes (persistente en Supabase) -------------
-function RecurrentesTab() {
+// ============================================================
+// Tab Recurrentes
+// ============================================================
+function RecurrentesTab({
+  recurringHook, contactsMap, openNew, formOpen, setFormOpen, editing, setEditing,
+}: {
+  recurringHook: ReturnType<typeof useRecurringInvoices>;
+  contactsMap: Map<string, any>;
+  openNew: () => void;
+  formOpen: boolean;
+  setFormOpen: (v: boolean) => void;
+  editing: RecurringInvoice | null;
+  setEditing: (v: RecurringInvoice | null) => void;
+}) {
   const confirm = useConfirm();
-  const { recurring, loading, create, update, remove } = useRecurringInvoices();
-  const { contacts } = useContacts();
-  const contactsMap = useMemo(() => {
-    const m = new Map<string, any>();
-    contacts.forEach((c) => m.set(c.id, c));
-    return m;
-  }, [contacts]);
-
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<RecurringInvoice | null>(null);
+  const { recurring, loading, create, update, remove } = recurringHook;
 
   const total = recurring
     .filter((r) => r.active)
     .reduce((s, r) => s + (r.frequency === "Mensual" ? r.amount : r.amount / 12), 0);
 
-  const openNew = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (r: RecurringInvoice) => { setEditing(r); setFormOpen(true); };
 
   const handleSubmit = async (values: NewRecurringInvoice) => {
@@ -350,12 +672,6 @@ function RecurrentesTab() {
           sub={`${recurring.length - recurring.filter((r) => r.active).length} pausadas`}
         />
         <StatCard label="ARR proyectado" value={Math.round(total * 12)} color="var(--purple)" sub="A 12 meses" />
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <Button variant="primary" size="sm" leftIcon={<Icon name="plus" size={13} />} onClick={openNew}>
-          Nueva recurrente
-        </Button>
       </div>
 
       {loading && (
@@ -586,68 +902,26 @@ function RecurringFormModal({
   );
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-const selectStyle: React.CSSProperties = {
-  height: 34, width: "100%", padding: "0 10px",
-  border: "1px solid var(--border)", borderRadius: 8,
-  background: "var(--surface)", outline: "none", fontSize: 13.5,
-};
-
-// ------------- Tab Remesas SEPA (persistente) -------------
+// ============================================================
+// Tab Remesas SEPA
+// ============================================================
 function RemesasTab({
-  invoicesHook, contactsHook,
+  invoicesHook, contactsMap, batchesHook,
+  pending, selected, setSelected, generateBatch, generating,
 }: {
   invoicesHook: ReturnType<typeof useInvoices>;
-  contactsHook: ReturnType<typeof useContacts>;
+  contactsMap: Map<string, any>;
+  batchesHook: ReturnType<typeof usePaymentBatches>;
+  pending: any[];
+  selected: Set<string>;
+  setSelected: (s: Set<string>) => void;
+  generateBatch: () => Promise<void>;
+  generating: boolean;
 }) {
   const confirm = useConfirm();
-  const { invoices } = invoicesHook;
-  const { contacts } = contactsHook;
-  const { batches, loading, create: createBatch, remove: removeBatch, update: updateBatch } = usePaymentBatches();
-  const contactsMap = useMemo(() => {
-    const m = new Map<string, any>();
-    contacts.forEach((c) => m.set(c.id, c));
-    return m;
-  }, [contacts]);
+  const { batches, loading, remove: removeBatch, update: updateBatch } = batchesHook;
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [generating, setGenerating] = useState(false);
-
-  // Facturas ya incluidas en alguna remesa previa (para no duplicar)
-  const invoicesInBatches = useMemo(() => {
-    const s = new Set<string>();
-    batches.forEach((b) => b.invoiceIds.forEach((id) => s.add(id)));
-    return s;
-  }, [batches]);
-
-  const pending = invoices.filter((i) => i.status === "pendiente" && !invoicesInBatches.has(i.id));
   const selTotal = pending.filter((p) => selected.has(p.id)).reduce((s, p) => s + p.total, 0);
-
-  const generateBatch = async () => {
-    const ids = Array.from(selected);
-    const total = pending.filter((p) => selected.has(p.id)).reduce((s, p) => s + p.total, 0);
-    if (ids.length === 0) return;
-    setGenerating(true);
-    try {
-      await createBatch({ invoiceIds: ids, total });
-      setSelected(new Set());
-    } catch (e) {
-      console.error(e);
-      alert("Error generando remesa");
-    } finally {
-      setGenerating(false);
-    }
-  };
 
   return (
     <>
@@ -745,22 +1019,22 @@ function RemesasTab({
             {selected.size} facturas seleccionadas · {selTotal.toLocaleString("es-ES", { useGrouping: "always" as any, minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
           </span>
           <div style={{ flex: 1 }} />
-          <Button variant="outline" size="sm" leftIcon={<Icon name="download" size={13} />}>Descargar XML SEPA</Button>
           <Button
-            variant="primary"
+            variant="ghost"
             size="sm"
-            leftIcon={<Icon name="bank" size={13} />}
-            onClick={generateBatch}
-            disabled={generating}
+            onClick={() => setSelected(new Set())}
           >
-            {generating ? "Generando…" : "Generar remesa"}
+            Limpiar selección
           </Button>
         </div>
       )}
 
       <Card padding={0} style={{ overflow: "hidden" }}>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: 13, fontWeight: 500 }}>
-          Facturas pendientes de remesar
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: 13, fontWeight: 500, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Facturas pendientes de remesar</span>
+          <span style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 400 }}>
+            Selecciona facturas y usa <b style={{ color: "var(--text)" }}>Generar remesa</b> arriba a la derecha.
+          </span>
         </div>
         <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 13 }}>
           <thead>
@@ -782,6 +1056,13 @@ function RemesasTab({
             </tr>
           </thead>
           <tbody>
+            {pending.length === 0 && (
+              <tr>
+                <td colSpan={8} style={{ padding: 36, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+                  No hay facturas pendientes de remesar.
+                </td>
+              </tr>
+            )}
             {pending.map((inv) => {
               const cli = contactsMap.get(inv.clientId as string);
               const overdue = inv.dueDate && inv.dueDate < D.TODAY;
@@ -818,3 +1099,43 @@ function RemesasTab({
     </>
   );
 }
+
+// ============================================================
+// Helpers
+// ============================================================
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
+      <span style={{
+        fontSize: 10.5, fontWeight: 500, color: "var(--text-muted)",
+        textTransform: "uppercase", letterSpacing: "0.05em",
+      }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+const selectStyle: React.CSSProperties = {
+  height: 34, width: "100%", padding: "0 10px",
+  border: "1px solid var(--border)", borderRadius: 8,
+  background: "var(--surface)", outline: "none", fontSize: 13.5,
+};
+
+const filterSelectStyle: React.CSSProperties = {
+  height: 34, width: "100%", padding: "0 10px",
+  border: "1px solid var(--border)", borderRadius: 7,
+  background: "var(--surface)", outline: "none", fontSize: 13, fontFamily: "inherit",
+};

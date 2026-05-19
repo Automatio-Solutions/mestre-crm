@@ -1,13 +1,17 @@
 "use client";
-import { Fragment } from "react";
+import { Fragment, useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Icon, Avatar, Button } from "@/components/ui";
+import { useRouter, usePathname } from "next/navigation";
+import { Icon, Avatar, Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui";
 import { useContacts } from "@/lib/db/useContacts";
 import { useClientSpaces } from "@/lib/db/useClientSpaces";
 import { useInvoices } from "@/lib/db/useInvoices";
 import { useQuotes } from "@/lib/db/useQuotes";
 import { usePurchases } from "@/lib/db/usePurchases";
+import { useTasks } from "@/lib/db/useTasks";
+import { useTaxModels } from "@/lib/db/useTaxModels";
+import { useAuth } from "@/lib/auth/AuthContext";
+import { deriveNotifications, type Notification } from "@/lib/notifications";
 import * as DMData from "@/lib/data";
 
 const labelMap: Record<string, string> = {
@@ -143,6 +147,310 @@ function Breadcrumbs({ route }: { route: string }) {
   );
 }
 
+// ============================================================
+// Notifications dropdown
+// Deriva notificaciones de tareas / facturas / modelos fiscales
+// para el usuario logueado.
+// ============================================================
+const severityColor: Record<Notification["severity"], string> = {
+  error: "var(--error)",
+  warning: "#C89B3C",
+  info: "var(--purple)",
+};
+const severityBg: Record<Notification["severity"], string> = {
+  error: "#F5E1E1",
+  warning: "#FAF1DC",
+  info: "var(--purple-soft)",
+};
+
+// Persistencia de notificaciones descartadas, por usuario, en localStorage.
+function useDismissedNotifications(userId: string | undefined) {
+  const storageKey = userId ? `dm-crm-notif-dismissed-${userId}` : null;
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  // Cargar al montar / cuando cambia el userId
+  useEffect(() => {
+    if (!storageKey) {
+      setDismissed(new Set());
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) setDismissed(new Set(JSON.parse(raw)));
+      else setDismissed(new Set());
+    } catch {
+      setDismissed(new Set());
+    }
+  }, [storageKey]);
+
+  const persist = useCallback((next: Set<string>) => {
+    if (!storageKey) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify([...next]));
+    } catch {}
+  }, [storageKey]);
+
+  const dismiss = useCallback((ids: string[]) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  const clearAll = useCallback(() => {
+    setDismissed(new Set());
+    if (storageKey) {
+      try { window.localStorage.removeItem(storageKey); } catch {}
+    }
+  }, [storageKey]);
+
+  return { dismissed, dismiss, clearAll };
+}
+
+function NotificationsDropdown() {
+  const router = useRouter();
+  const { user, hasScope } = useAuth();
+  const { tasks } = useTasks();
+  const { invoices } = useInvoices();
+  const { taxModels } = useTaxModels();
+
+  const userRef = user?.userRef || null;
+  const { dismissed, dismiss, clearAll } = useDismissedNotifications(user?.id);
+
+  // Cada fuente de notificación se gatea por el scope correspondiente.
+  // Así, un usuario con solo "proyectos" no recibe alertas de facturas
+  // ni de impuestos (no tiene acceso a esas pantallas).
+  const taskItems = hasScope("proyectos") ? tasks : [];
+  const invoiceItems = hasScope("ventas") ? invoices : [];
+  const taxItems = hasScope("impuestos") ? taxModels : [];
+
+  const allNotifications = useMemo(
+    () => deriveNotifications({
+      userRef,
+      tasks: taskItems,
+      invoices: invoiceItems,
+      taxModels: taxItems,
+    }),
+    [userRef, taskItems, invoiceItems, taxItems],
+  );
+
+  // Filtra las descartadas. Si ya no están en la lista derivada (porque
+  // la causa raíz se resolvió), limpiamos automáticamente del set.
+  const notifications = useMemo(
+    () => allNotifications.filter((n) => !dismissed.has(n.id)),
+    [allNotifications, dismissed],
+  );
+
+  const count = notifications.length;
+  const hasError = notifications.some((n) => n.severity === "error");
+
+  return (
+    <Dropdown
+      align="end"
+      width={380}
+      trigger={
+        <button
+          title="Notificaciones"
+          style={{
+            position: "relative",
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 34, height: 34, borderRadius: 8,
+            background: "transparent", color: "var(--text-muted)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--beige-bg)";
+            e.currentTarget.style.color = "var(--text)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--text-muted)";
+          }}
+        >
+          <Icon name="bell" size={16} />
+          {count > 0 && (
+            <span style={{
+              position: "absolute", top: 4, right: 4,
+              minWidth: 16, height: 16, padding: "0 4px", borderRadius: 999,
+              background: hasError ? "var(--error)" : "var(--purple)",
+              color: "#fff", fontSize: 10, fontWeight: 600,
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              lineHeight: 1,
+            }}>
+              {count > 99 ? "99+" : count}
+            </span>
+          )}
+        </button>
+      }
+    >
+      <div style={{
+        padding: "10px 14px 8px",
+        borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 8,
+      }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Notificaciones</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+            {count === 0
+              ? "Estás al día"
+              : `${count} pendiente${count === 1 ? "" : "s"}`}
+          </div>
+        </div>
+        {count > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              dismiss(notifications.map((n) => n.id));
+            }}
+            style={{
+              fontSize: 11, fontWeight: 500, color: "var(--purple)",
+              padding: "4px 8px", borderRadius: 6,
+              background: "transparent",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--purple-soft)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            title="Descartar todas las notificaciones visibles"
+          >
+            Marcar todas como vistas
+          </button>
+        )}
+      </div>
+
+      {count === 0 ? (
+        <div style={{ padding: "28px 14px", textAlign: "center", color: "var(--text-muted)" }}>
+          <Icon name="bell" size={20} style={{ opacity: 0.4 }} />
+          <div style={{ fontSize: 12.5, marginTop: 8 }}>
+            {userRef
+              ? "No tienes notificaciones nuevas."
+              : "Asigna tu user_ref para ver tus tareas aquí."}
+          </div>
+        </div>
+      ) : (
+        <div style={{ maxHeight: 420, overflow: "auto", padding: 4 }}>
+          {notifications.slice(0, 20).map((n) => (
+            <button
+              key={n.id}
+              onClick={() => { dismiss([n.id]); router.push(n.href); }}
+              style={{
+                display: "flex", alignItems: "flex-start", gap: 10,
+                width: "100%", padding: "10px 12px", borderRadius: 7,
+                background: "transparent", textAlign: "left",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--beige-bg)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <span style={{
+                flexShrink: 0,
+                width: 26, height: 26, borderRadius: 6,
+                background: severityBg[n.severity],
+                color: severityColor[n.severity],
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon name={n.icon} size={12} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 12.5, fontWeight: 500,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  color: "var(--text)",
+                }}>
+                  {n.title}
+                </div>
+                {n.subtitle && (
+                  <div style={{
+                    fontSize: 11.5, color: "var(--text-muted)", marginTop: 2,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {n.subtitle}
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+          {notifications.length > 20 && (
+            <div style={{
+              padding: "8px 12px", fontSize: 11, color: "var(--text-muted)",
+              textAlign: "center", borderTop: "1px solid var(--border)",
+            }}>
+              y {notifications.length - 20} más
+            </div>
+          )}
+        </div>
+      )}
+    </Dropdown>
+  );
+}
+
+// ============================================================
+// User dropdown (Ajustes + Cerrar sesión)
+// ============================================================
+function UserDropdown() {
+  const { user, logout } = useAuth();
+  const teamUser =
+    (user?.userRef ? (DMData as any).userById?.(user.userRef) : null) ||
+    (DMData as any).USERS?.[0];
+  const displayName = user?.name || teamUser?.name || "—";
+  const displayEmail = user?.email || "";
+
+  return (
+    <Dropdown
+      align="end"
+      width={240}
+      trigger={
+        <button
+          title={displayName}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: 3, borderRadius: 999,
+            background: "transparent", border: "none", cursor: "pointer",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--beige-bg)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <Avatar user={teamUser} size={30} />
+        </button>
+      }
+    >
+      <div style={{
+        padding: "10px 12px 12px", borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <Avatar user={teamUser} size={32} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{
+            fontSize: 13, fontWeight: 500,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>
+            {displayName}
+          </div>
+          {displayEmail && (
+            <div style={{
+              fontSize: 11.5, color: "var(--text-muted)",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}>
+              {displayEmail}
+            </div>
+          )}
+        </div>
+      </div>
+      <DropdownItem leftIcon={<Icon name="settings" size={13} />}>
+        Ajustes
+      </DropdownItem>
+      <DropdownSeparator />
+      <DropdownItem
+        danger
+        leftIcon={<Icon name="x" size={13} />}
+        onClick={logout}
+      >
+        Cerrar sesión
+      </DropdownItem>
+    </Dropdown>
+  );
+}
+
 export function Header({ onOpenCmd }: { onOpenCmd: () => void }) {
   const pathname = usePathname() || "/";
   return (
@@ -176,11 +484,10 @@ export function Header({ onOpenCmd }: { onOpenCmd: () => void }) {
           </span>
         </button>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Button variant="ghost" size="icon"><Icon name="bell" size={16} /></Button>
-        <Button variant="ghost" size="icon"><Icon name="settings" size={16} /></Button>
-        <div style={{ width: 1, height: 24, background: "var(--border)", margin: "0 4px" }} />
-        <Avatar user={DMData.USERS[0]} size={32} />
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <NotificationsDropdown />
+        <div style={{ width: 1, height: 24, background: "var(--border)", margin: "0 6px" }} />
+        <UserDropdown />
       </div>
     </header>
   );
